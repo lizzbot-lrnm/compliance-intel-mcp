@@ -1,0 +1,47 @@
+version: 1
+name: compliance-intel-mcp
+title: UK & US Sanctions, Corporate Registry, DNS Security & Recall Intelligence MCP
+description: >-
+  Deterministic, zero-LLM-cost UK & US compliance screening MCP server. Screens
+  entities against the live UK FCDO Consolidated Sanctions List, UK HM Treasury
+  OFSI Consolidated List, UK Charity Commission / Companies House & GLEIF LEI
+  registries, DNS & DMARC security posture (MX, SPF, DMARC, CAA over DoH), US
+  Treasury OFAC SDN list, and US FDA / CPSC / NHTSA enforcement & safety recalls.
+  Includes verbatim source URLs, ISO-8601 UTC retrieval timestamps, and strict
+  fail-closed error handling.
+runtime: python
+entrypoint: mcp_server.py
+pricing:
+  protocol: x402
+  network: base
+  recipient: "0xfe4404ee088a741DC6F62d4132e21E14B1912940"
+  asset: usdc
+  price: "0.02"
+  per_call:
+    default: "0.02"
+    tools:
+      uk_sanctions_and_company_screen: "0.02"
+      email_security_posture: "0.02"
+      screen_uk_sanctions: "0.02"
+      screen_us_ofac_sanctions: "0.02"
+      lookup_uk_public_registries: "0.02"
+      us_regulatory_recall_and_enforcement_check: "0.02"
+tools:
+  - name: uk_sanctions_and_company_screen
+    description: Unified UK FCDO/OFSI sanctions, UK Charity/Companies House/GLEIF registry, DNS/DMARC security posture, US OFAC SDN, and US FDA/CPSC/NHTSA recall screen.
+    price: "0.02"
+  - name: email_security_posture
+    description: Deterministic DNS & Email Security Posture audit (MX, SPF, DMARC, CAA) over live Cloudflare/Google DoH with A-F grading.
+    price: "0.02"
+  - name: screen_uk_sanctions
+    description: Live UK FCDO Sanctions List & HM Treasury OFSI Consolidated List screening.
+    price: "0.02"
+  - name: screen_us_ofac_sanctions
+    description: Live US Treasury OFAC Specially Designated Nationals (SDN) screening.
+    price: "0.02"
+  - name: lookup_uk_public_registries
+    description: Live UK Charity Commission / Companies House OrgID & Global LEI Foundation (GLEIF) registry lookup.
+    price: "0.02"
+  - name: us_regulatory_recall_and_enforcement_check
+    description: Live US FDA openFDA enforcement, US CPSC consumer product recall, and US NHTSA vehicle recall check.
+    price: "0.02"

@@ -1,0 +1,80 @@
+{
+  "title": "UK & US Sanctions, Registry, DNS Security & Recall Compliance Screen Input",
+  "type": "object",
+  "schemaVersion": 1,
+  "properties": {
+    "action": {
+      "title": "Screening Action",
+      "type": "string",
+      "description": "Select the full unified compliance screen or an individual deterministic check.",
+      "default": "uk_sanctions_and_company_screen",
+      "enum": [
+        "uk_sanctions_and_company_screen",
+        "email_security_posture",
+        "screen_uk_sanctions",
+        "screen_us_ofac_sanctions",
+        "lookup_uk_public_registries",
+        "us_regulatory_recall_and_enforcement_check"
+      ]
+    },
+    "entity_name": {
+      "title": "Entity / Individual / Product Name",
+      "type": "string",
+      "description": "Organization, company, charity, person, or product name to screen.",
+      "default": "Oxfam",
+      "editor": "textfield"
+    },
+    "domain": {
+      "title": "Domain Name (for Email & DNS Security Posture)",
+      "type": "string",
+      "description": "Optional domain to audit MX, SPF, DMARC, and CAA records over Cloudflare/Google DNS-over-HTTPS.",
+      "default": "oxfam.org.uk",
+      "editor": "textfield"
+    },
+    "company_or_charity_number": {
+      "title": "UK Charity or Companies House Number",
+      "type": "string",
+      "description": "Optional UK Charity registration number (e.g. 202918) or UK Companies House number (e.g. 00612172).",
+      "default": "202918",
+      "editor": "textfield"
+    },
+    "include_us_ofac": {
+      "title": "Include US Treasury OFAC SDN Screen",
+      "type": "boolean",
+      "description": "Screen entity against the live US Treasury OFAC SDN list.",
+      "default": true
+    },
+    "include_us_recalls": {
+      "title": "Include US FDA / CPSC / NHTSA Recall & Enforcement Screen",
+      "type": "boolean",
+      "description": "Screen entity/product against live US FDA openFDA, CPSC SaferProducts, and NHTSA recall APIs.",
+      "default": true
+    },
+    "vehicle_make": {
+      "title": "Vehicle Make (Optional NHTSA Check)",
+      "type": "string",
+      "description": "Optional vehicle manufacturer make for NHTSA recall lookup (e.g. Ford).",
+      "editor": "textfield"
+    },
+    "vehicle_model": {
+      "title": "Vehicle Model (Optional NHTSA Check)",
+      "type": "string",
+      "description": "Optional vehicle model for NHTSA recall lookup (e.g. F-150).",
+      "editor": "textfield"
+    },
+    "vehicle_year": {
+      "title": "Vehicle Model Year (Optional NHTSA Check)",
+      "type": "integer",
+      "description": "Optional vehicle model year for NHTSA recall lookup (e.g. 2023)."
+    },
+    "max_results": {
+      "title": "Max Results Per Source",
+      "type": "integer",
+      "description": "Maximum number of matched records to return per data source.",
+      "default": 5,
+      "minimum": 1,
+      "maximum": 50
+    }
+  },
+  "required": ["entity_name"]
+}
