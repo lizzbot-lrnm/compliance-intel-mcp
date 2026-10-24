@@ -1,5 +1,5 @@
 {
-  "title": "UK & US Sanctions, Registry, DNS Security & Recall Compliance Screen Input",
+  "title": "UK, EU & US Sanctions, VAT, Registry, RDAP/DNS Security, Recall & MCP Trust Input",
   "type": "object",
   "schemaVersion": 1,
   "properties": {
@@ -10,6 +10,12 @@
       "default": "uk_sanctions_and_company_screen",
       "enum": [
         "uk_sanctions_and_company_screen",
+        "health_and_provenance",
+        "verify_eu_uk_vat",
+        "lookup_uk_postcode_and_council",
+        "domain_rdap_and_dns_hygiene",
+        "bulk_email_and_domain_hygiene",
+        "audit_mcp_server_trust",
         "email_security_posture",
         "screen_uk_sanctions",
         "screen_us_ofac_sanctions",
@@ -25,11 +31,17 @@
       "editor": "textfield"
     },
     "domain": {
-      "title": "Domain Name (for Email & DNS Security Posture)",
+      "title": "Domain Name (for RDAP, Email & DNS Security Posture)",
       "type": "string",
-      "description": "Optional domain to audit MX, SPF, DMARC, and CAA records over Cloudflare/Google DNS-over-HTTPS.",
+      "description": "Optional domain to audit RDAP, MX, SPF, DMARC, and CAA records over Cloudflare/Google DNS-over-HTTPS.",
       "default": "oxfam.org.uk",
       "editor": "textfield"
+    },
+    "domains": {
+      "title": "Batch Domains List (for bulk_email_and_domain_hygiene)",
+      "type": "array",
+      "description": "Optional list of up to 100 domains for batch DNS/DMARC hygiene screening (charged_results_only=True).",
+      "editor": "stringList"
     },
     "company_or_charity_number": {
       "title": "UK Charity or Companies House Number",
@@ -37,6 +49,24 @@
       "description": "Optional UK Charity registration number (e.g. 202918) or UK Companies House number (e.g. 00612172).",
       "default": "202918",
       "editor": "textfield"
+    },
+    "vat_number": {
+      "title": "EU or UK VAT Number (e.g. IE6388047V or GB999999973)",
+      "type": "string",
+      "description": "Optional EU Member State, Northern Ireland (XI), or UK (GB) VAT number to verify via EU VIES REST API / HMRC Modulo-97.",
+      "editor": "textfield"
+    },
+    "uk_postcode": {
+      "title": "UK Postcode (for ONS/OS Council & Parish Lookup)",
+      "type": "string",
+      "description": "Optional UK postcode (e.g. SW1A 1AA or OX14 4AB) to resolve Local Authority Council, Civil Parish, Ward, and GSS codes.",
+      "editor": "textfield"
+    },
+    "include_rdap": {
+      "title": "Include Live RDAP Registration Metadata",
+      "type": "boolean",
+      "description": "Fetch live IANA/Nominet RDAP registration, expiration, status flags, and nameservers alongside DNS security checks.",
+      "default": false
     },
     "include_us_ofac": {
       "title": "Include US Treasury OFAC SDN Screen",
@@ -70,7 +100,7 @@
     "max_results": {
       "title": "Max Results Per Source",
       "type": "integer",
-      "description": "Maximum number of matched records to return per data source.",
+      "description": "Maximum number of matched records to return per data source (clamped 1..50).",
       "default": 5,
       "minimum": 1,
       "maximum": 50

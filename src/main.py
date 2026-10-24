@@ -1,7 +1,7 @@
 """
-Apify Actor entrypoint for UK & US Public-Record Compliance, Sanctions,
-Corporate/Charity Registry, DNS/DMARC Security Posture, and US FDA/CPSC/NHTSA
-Enforcement & Recall Screening.
+Apify Actor entrypoint for UK, EU & US Public-Record Compliance, Sanctions,
+Corporate/Charity Registry, EU VIES / UK HMRC VAT, UK Postcode OGL, RDAP + DNS/DMARC
+Security Posture, US FDA/CPSC/NHTSA Enforcement, and MCP Trust Auditing.
 
 Supports:
   1. Native Apify Python SDK (`apify.Actor`) execution on Apify Cloud / CLI
@@ -24,28 +24,34 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from compliance_engine import (
+    audit_mcp_server_trust,
+    bulk_email_and_domain_hygiene,
+    domain_rdap_and_dns_hygiene,
     email_security_posture,
+    health_and_provenance,
+    lookup_uk_postcode_and_council,
     lookup_uk_public_registries,
     screen_uk_sanctions,
     screen_us_ofac_sanctions,
     uk_sanctions_and_company_screen,
     us_regulatory_recall_and_enforcement_check,
+    verify_eu_uk_vat,
 )
 
 
 def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     Deterministically process an Apify Actor input payload and return dataset items.
-    Supports single-entity or batch (`entities` list) screening.
+    Supports single-entity or batch (`entities` list, bounded <= 25) screening.
     """
     action = str(actor_input.get("action") or "uk_sanctions_and_company_screen").strip()
-    max_results = int(actor_input.get("max_results") or 5)
+    max_results = min(max(1, int(actor_input.get("max_results") or 5)), 50)
 
-    # Support batch list of entities if provided
+    # Support batch list of entities if provided (bounded to 25 per Worf DoS hardening)
     entities = actor_input.get("entities")
     if isinstance(entities, list) and len(entities) > 0:
         results: List[Dict[str, Any]] = []
-        for item in entities:
+        for item in entities[:25]:
             if isinstance(item, str):
                 sub_input = dict(actor_input)
                 sub_input.pop("entities", None)
@@ -60,7 +66,11 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
 
     entity_name = str(actor_input.get("entity_name") or actor_input.get("query") or "Oxfam").strip()
     domain = actor_input.get("domain")
+    domains = actor_input.get("domains")
     company_or_charity_number = actor_input.get("company_or_charity_number")
+    vat_number = actor_input.get("vat_number")
+    uk_postcode = actor_input.get("uk_postcode")
+    include_rdap = bool(actor_input.get("include_rdap", False))
     include_us_ofac = bool(actor_input.get("include_us_ofac", True))
     include_us_recalls = bool(actor_input.get("include_us_recalls", True))
     vehicle_make = actor_input.get("vehicle_make")
@@ -71,6 +81,24 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     else:
         vehicle_year = None
 
+    if action == "health_and_provenance":
+        return [health_and_provenance()]
+    if action == "verify_eu_uk_vat":
+        target_vat = str(vat_number or entity_name).strip()
+        return [verify_eu_uk_vat(vat_number=target_vat)]
+    if action == "lookup_uk_postcode_and_council":
+        target_pc = str(uk_postcode or entity_name).strip()
+        return [lookup_uk_postcode_and_council(postcode=target_pc)]
+    if action == "domain_rdap_and_dns_hygiene":
+        target_domain = str(domain or entity_name).strip()
+        return [domain_rdap_and_dns_hygiene(domain=target_domain)]
+    if action == "bulk_email_and_domain_hygiene":
+        domain_list = domains if isinstance(domains, list) and domains else [str(domain or entity_name).strip()]
+        return [bulk_email_and_domain_hygiene(domains=domain_list, include_rdap=include_rdap)]
+    if action == "audit_mcp_server_trust":
+        manifest = actor_input.get("manifest_or_tools") or actor_input.get("query") or "{}"
+        server_name = str(actor_input.get("server_name") or entity_name or "unknown-mcp-server")
+        return [audit_mcp_server_trust(manifest_or_tools=manifest, server_name=server_name)]
     if action == "email_security_posture":
         target_domain = str(domain or entity_name).strip()
         return [email_security_posture(domain=target_domain)]
@@ -102,6 +130,9 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         entity_name=entity_name,
         domain=domain,
         company_or_charity_number=company_or_charity_number,
+        vat_number=vat_number,
+        uk_postcode=uk_postcode,
+        include_rdap=include_rdap,
         include_us_ofac=include_us_ofac,
         include_us_recalls=include_us_recalls,
         vehicle_make=vehicle_make,
@@ -139,7 +170,7 @@ async def main() -> None:
 
         async with Actor:
             actor_input = await Actor.get_input() or {}
-            Actor.log.info(f"Running UK/US Compliance Intel Actor with input: {actor_input}")
+            Actor.log.info(f"Running UK/EU/US Compliance Intel Actor with input: {actor_input}")
             items = execute_actor_action(actor_input)
             for item in items:
                 if item.get("status") == "error" and item.get("fail_closed"):

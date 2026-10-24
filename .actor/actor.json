@@ -1,9 +1,16 @@
 {
   "actorSpecification": 1,
   "name": "uk-us-compliance-mcp-actor",
-  "title": "UK & US Compliance, Sanctions, DNS & Recall Screen",
-  "description": "Deterministic, zero-LLM-cost UK/US compliance & security screen: UK FCDO/OFSI sanctions, UK Charity/Companies House & GLEIF LEI registries, DNS/DMARC security posture (MX, SPF, DMARC, CAA), US OFAC SDN, and US FDA/CPSC/NHTSA recalls with live URLs & UTC timestamps.",
-  "version": "0.0",
+  "title": "UK, EU & US Sanctions, VAT, Registry, RDAP/DNS & MCP Trust Screen",
+  "description": "Deterministic, zero-LLM-cost UK/EU/US compliance & security screen: UK FCDO/OFSI sanctions, UK Charity/Companies House & GLEIF LEI registries, EU VIES & UK HMRC VAT, UK Postcode OGL, RDAP + DNS/DMARC security posture (single & batch 100-domain mode), US OFAC SDN, US FDA/CPSC/NHTSA recalls, and MCP Trust Auditor.",
+  "seoTitle": "UK, EU & US Sanctions, VAT, Corporate Registry, DNS & MCP Compliance API",
+  "seoDescription": "Verify UK FCDO/OFSI & US OFAC sanctions, EU VIES/UK VAT, UK Companies House/Charity & GLEIF LEI, RDAP/DMARC/SPF email hygiene, FDA/CPSC/NHTSA recalls, and MCP server trust.",
+  "categories": [
+    "BUSINESS",
+    "LEAD_GENERATION",
+    "DEVELOPER_TOOLS"
+  ],
+  "version": "0.1",
   "buildTag": "latest",
   "meta": {
     "templateId": "python-start"
@@ -25,6 +32,8 @@
               "summary",
               "uk_sanctions",
               "uk_registries",
+              "vat_verification",
+              "uk_postcode_lookup",
               "email_security_posture",
               "us_ofac_sanctions",
               "us_regulatory_recalls",

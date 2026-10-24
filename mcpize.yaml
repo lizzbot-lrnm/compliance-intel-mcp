@@ -1,14 +1,15 @@
 version: 1
 name: compliance-intel-mcp
-title: UK & US Sanctions, Corporate Registry, DNS Security & Recall Intelligence MCP
+title: UK, EU & US Sanctions, VAT, Corporate Registry, DNS/RDAP & MCP Trust Intelligence
 description: >-
-  Deterministic, zero-LLM-cost UK & US compliance screening MCP server. Screens
+  Deterministic, zero-LLM-cost UK, EU & US compliance screening MCP server. Screens
   entities against the live UK FCDO Consolidated Sanctions List, UK HM Treasury
   OFSI Consolidated List, UK Charity Commission / Companies House & GLEIF LEI
-  registries, DNS & DMARC security posture (MX, SPF, DMARC, CAA over DoH), US
-  Treasury OFAC SDN list, and US FDA / CPSC / NHTSA enforcement & safety recalls.
-  Includes verbatim source URLs, ISO-8601 UTC retrieval timestamps, and strict
-  fail-closed error handling.
+  registries, EU VIES REST API & UK HMRC VAT Modulo-97, UK ONS/OS Postcode &
+  Local Authority Council API, RDAP + DNS/DMARC security posture (MX, SPF, DMARC,
+  CAA over DoH), US Treasury OFAC SDN list, US FDA / CPSC / NHTSA recalls, and
+  Pre-Connection MCP Server Trust & Token-Bloat Auditing. Includes verbatim source
+  URLs, ISO-8601 UTC retrieval timestamps, and strict fail-closed error handling.
 runtime: python
 entrypoint: mcp_server.py
 pricing:
@@ -20,16 +21,40 @@ pricing:
   per_call:
     default: "0.02"
     tools:
+      health_and_provenance: "0.00"
       uk_sanctions_and_company_screen: "0.02"
+      verify_eu_uk_vat: "0.01"
+      lookup_uk_postcode_and_council: "0.01"
+      domain_rdap_and_dns_hygiene: "0.01"
+      bulk_email_and_domain_hygiene: "0.02"
+      audit_mcp_server_trust: "0.01"
       email_security_posture: "0.02"
       screen_uk_sanctions: "0.02"
       screen_us_ofac_sanctions: "0.02"
       lookup_uk_public_registries: "0.02"
       us_regulatory_recall_and_enforcement_check: "0.02"
 tools:
+  - name: health_and_provenance
+    description: Free ($0.00) health, provenance, and CAIP-2 Base x402 payment route handshake.
+    price: "0.00"
   - name: uk_sanctions_and_company_screen
-    description: Unified UK FCDO/OFSI sanctions, UK Charity/Companies House/GLEIF registry, DNS/DMARC security posture, US OFAC SDN, and US FDA/CPSC/NHTSA recall screen.
+    description: Unified UK FCDO/OFSI sanctions, UK Charity/Companies House/GLEIF registry, EU/UK VAT, UK Postcode, RDAP+DNS/DMARC security posture, US OFAC SDN, and US FDA/CPSC/NHTSA recall screen.
     price: "0.02"
+  - name: verify_eu_uk_vat
+    description: Live European Commission VIES REST API & UK HMRC Modulo-97 VAT number verification.
+    price: "0.01"
+  - name: lookup_uk_postcode_and_council
+    description: Live UK ONS/Ordnance Survey Postcode to Local Authority Council, Parish, Ward, Constituency, and GSS codes lookup.
+    price: "0.01"
+  - name: domain_rdap_and_dns_hygiene
+    description: Combined IANA/Nominet RDAP domain registration metadata and Cloudflare/Google DoH MX, SPF, DMARC, and CAA security grading.
+    price: "0.01"
+  - name: bulk_email_and_domain_hygiene
+    description: Batch B2B RevOps domain/MX/SPF/DMARC hygiene screen for up to 100 domains with charged_results_only=True.
+    price: "0.02"
+  - name: audit_mcp_server_trust
+    description: Deterministic 0-100 Pre-Connection MCP Trust, Prompt-Injection & Schema Token-Bloat Auditor.
+    price: "0.01"
   - name: email_security_posture
     description: Deterministic DNS & Email Security Posture audit (MX, SPF, DMARC, CAA) over live Cloudflare/Google DoH with A-F grading.
     price: "0.02"

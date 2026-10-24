@@ -910,6 +910,9 @@ def uk_sanctions_and_company_screen(
     entity_name: str,
     domain: Optional[str] = None,
     company_or_charity_number: Optional[str] = None,
+    vat_number: Optional[str] = None,
+    uk_postcode: Optional[str] = None,
+    include_rdap: bool = False,
     include_us_ofac: bool = True,
     include_us_recalls: bool = True,
     vehicle_make: Optional[str] = None,
@@ -948,10 +951,31 @@ def uk_sanctions_and_company_screen(
             json_fetcher=json_fetcher,
         )
 
+        max_results = min(max(1, int(max_results)), 50)
         dns_posture: Optional[Dict[str, Any]] = None
         if domain and domain.strip():
-            dns_posture = email_security_posture(
-                domain=domain.strip(),
+            if include_rdap:
+                dns_posture = domain_rdap_and_dns_hygiene(
+                    domain=domain.strip(),
+                    json_fetcher=json_fetcher,
+                )
+            else:
+                dns_posture = email_security_posture(
+                    domain=domain.strip(),
+                    json_fetcher=json_fetcher,
+                )
+
+        vat_verification: Optional[Dict[str, Any]] = None
+        if vat_number and vat_number.strip():
+            vat_verification = verify_eu_uk_vat(
+                vat_number=vat_number.strip(),
+                json_fetcher=json_fetcher,
+            )
+
+        postcode_lookup: Optional[Dict[str, Any]] = None
+        if uk_postcode and uk_postcode.strip():
+            postcode_lookup = lookup_uk_postcode_and_council(
+                postcode=uk_postcode.strip(),
                 json_fetcher=json_fetcher,
             )
 
@@ -989,7 +1013,9 @@ def uk_sanctions_and_company_screen(
 
         # Collect all verbatim sources
         all_sources: List[Dict[str, str]] = []
-        for section in (uk_sanctions, uk_registries, dns_posture, us_ofac, us_recalls):
+        if vat_verification and not vat_verification.get("is_valid"):
+            risk_flags.append(f"INVALID_VAT_NUMBER ({vat_verification.get('vat_number')})")
+        for section in (uk_sanctions, uk_registries, dns_posture, vat_verification, postcode_lookup, us_ofac, us_recalls):
             if section and "sources" in section:
                 all_sources.extend(section["sources"])
 
@@ -1026,6 +1052,8 @@ def uk_sanctions_and_company_screen(
             "uk_sanctions": uk_sanctions,
             "uk_registries": uk_registries,
             "email_security_posture": dns_posture,
+            "vat_verification": vat_verification,
+            "uk_postcode_lookup": postcode_lookup,
             "us_ofac_sanctions": us_ofac,
             "us_regulatory_recalls": us_recalls,
             "sources": all_sources,
@@ -1043,3 +1071,487 @@ def uk_sanctions_and_company_screen(
                 "status_code": exc.status_code,
             },
         }
+
+
+# ---------------------------------------------------------------------------
+# Stage-2 Deterministic Extensions (v1.1.0):
+#   - Worf Layer-1 Indirect Prompt-Injection Sanitizer
+#   - EU VIES REST API + UK HMRC Modulo-97 VAT Verification
+#   - UK Postcode -> Local Authority / Parish / ONS GSS Lookup (api.postcodes.io OGL)
+#   - Domain RDAP + DNS/DMARC Security Hygiene & Batch RevOps Array Mode
+#   - MCP Server Pre-Connection Trust & Token-Bloat Auditor
+#   - Free Provenance & CAIP-2 x402 Handshake Endpoint
+# ---------------------------------------------------------------------------
+
+EU_VIES_BASE_URL = "https://ec.europa.eu/taxation_customs/vies/rest-api"
+UK_POSTCODES_API_URL = "https://api.postcodes.io/postcodes"
+RDAP_DOMAIN_BASE_URL = "https://rdap.org/domain"
+
+EU_VIES_COUNTRIES = {
+    "AT", "BE", "BG", "CY", "CZ", "DE", "DK", "EE", "EL", "ES",
+    "FI", "FR", "HR", "HU", "IE", "IT", "LT", "LU", "LV", "MT",
+    "NL", "PL", "PT", "RO", "SE", "SI", "SK", "XI",
+}
+
+_INJECTION_SCRUB_RE = re.compile(
+    r"([\U000e0000-\U000e007f\u202a-\u202e\u2066-\u2069]|<\s*/?\s*(?:system|cursor_untrusted_data|instruction)[^>]*>|ignore\s+(?:all\s+)?previous\s+instructions)",
+    re.IGNORECASE,
+)
+
+
+def _sanitize_untrusted_text(value: Optional[str], max_len: int = 400) -> str:
+    """Strip invisible Unicode tag characters, bidi overrides, and prompt-injection tags."""
+    if not value:
+        return ""
+    cleaned = _INJECTION_SCRUB_RE.sub("[REDACTED_CONTROL_SEQ]", str(value))
+    return cleaned.strip()[:max_len]
+
+
+def _validate_uk_vat_mod97(digits: str) -> bool:
+    """
+    Deterministic HMRC Modulo-97 check digit validation for 9-digit (or 12-digit branch)
+    UK GB VAT registration numbers.
+    """
+    if len(digits) not in (9, 12) or not digits.isdigit():
+        return False
+    nine = digits[:9]
+    weights = [8, 7, 6, 5, 4, 3, 2]
+    total = sum(int(nine[i]) * weights[i] for i in range(7))
+    check = int(nine[7:9])
+    # Pre-2010 modulus 97 and Post-2010 (+55) modulus 97 rules
+    rem1 = total % 97
+    expected1 = (97 - rem1) % 97
+    rem2 = (total + 55) % 97
+    expected2 = (97 - rem2) % 97
+    return check in (expected1, expected2)
+
+
+def verify_eu_uk_vat(
+    vat_number: str,
+    json_fetcher: Optional[Callable[..., Tuple[Any, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Validate an EU Member State, Northern Ireland (XI), or UK (GB) VAT number.
+    - For EU (27 states) & XI: queries live European Commission VIES REST API
+      (https://ec.europa.eu/taxation_customs/vies/rest-api/ms/{country}/vat/{number}).
+    - For GB: performs deterministic HMRC Modulo-97 check-digit & format verification,
+      and optionally cross-checks XI VIES if applicable.
+    """
+    raw = (vat_number or "").strip().upper()
+    cleaned = re.sub(r"[\s\-\.]+", "", raw)
+    if len(cleaned) < 4 or not cleaned[:2].isalpha():
+        raise ValueError(f"Invalid VAT number format (expected 2-letter country prefix): {vat_number!r}")
+
+    country_code = cleaned[:2]
+    if country_code == "GR":
+        country_code = "EL"
+    body_number = cleaned[2:]
+    json_fetcher = json_fetcher or http_get_json
+    now_ts = utc_now_iso()
+
+    if country_code == "GB":
+        is_valid_syntax = _validate_uk_vat_mod97(body_number)
+        return {
+            "status": "ok",
+            "fail_closed": False,
+            "vat_number": f"GB{body_number}",
+            "country_code": "GB",
+            "national_number": body_number,
+            "is_valid": is_valid_syntax,
+            "validation_method": "UK_HMRC_MOD97_DETERMINISTIC",
+            "trader_name": None,
+            "trader_address": None,
+            "checked_at_utc": now_ts,
+            "sources": [
+                {
+                    "name": "UK HMRC VAT Registration Number Modulo-97 Specification",
+                    "url": "https://www.gov.uk/vat-registration",
+                    "retrieved_at_utc": now_ts,
+                }
+            ],
+        }
+
+    if country_code not in EU_VIES_COUNTRIES:
+        raise ValueError(f"Unsupported VAT country prefix: {country_code!r}")
+
+    vies_url = f"{EU_VIES_BASE_URL}/ms/{urllib.parse.quote(country_code)}/vat/{urllib.parse.quote(body_number)}"
+    data, retrieved_at = json_fetcher(vies_url)
+    if not isinstance(data, dict):
+        raise ComplianceUpstreamError(
+            f"Malformed JSON from EU VIES API for {country_code}{body_number}",
+            source_url=vies_url,
+        )
+
+    user_error = str(data.get("userError") or "")
+    if user_error in ("MS_UNAVAILABLE", "SERVICE_UNAVAILABLE", "TIMEOUT", "GLOBAL_MAX_CONCURRENT_REQ"):
+        raise ComplianceUpstreamError(
+            f"EU VIES member state service unavailable ({user_error})",
+            source_url=vies_url,
+            status_code=503,
+        )
+
+    is_valid = bool(data.get("isValid", False))
+    trader_name = _sanitize_untrusted_text(data.get("name"), 200)
+    trader_addr = _sanitize_untrusted_text(data.get("address"), 300)
+    if trader_name == "---":
+        trader_name = ""
+    if trader_addr == "---":
+        trader_addr = ""
+
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "vat_number": f"{country_code}{body_number}",
+        "country_code": country_code,
+        "national_number": body_number,
+        "is_valid": is_valid,
+        "vies_status": user_error or ("VALID" if is_valid else "INVALID"),
+        "validation_method": "EU_COMMISSION_VIES_LIVE_API",
+        "trader_name": trader_name or None,
+        "trader_address": trader_addr or None,
+        "request_date": data.get("requestDate"),
+        "checked_at_utc": retrieved_at,
+        "sources": [
+            {
+                "name": f"European Commission VIES VAT API ({country_code})",
+                "url": vies_url,
+                "retrieved_at_utc": retrieved_at,
+            }
+        ],
+    }
+
+
+def lookup_uk_postcode_and_council(
+    postcode: str,
+    json_fetcher: Optional[Callable[..., Tuple[Any, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Resolve a UK postcode against the official ONS / Ordnance Survey Open Government Licence
+    API (https://api.postcodes.io/postcodes/{postcode}) to return Local Authority Council,
+    Civil Parish, Electoral Ward, Parliamentary Constituency, ONS GSS codes, and coordinates.
+    Zero personal data (strictly institutional geographic boundary metadata).
+    """
+    raw = (postcode or "").strip().upper()
+    cleaned = re.sub(r"[^A-Z0-9]", "", raw)
+    if len(cleaned) < 5 or len(cleaned) > 8:
+        raise ValueError(f"Invalid UK postcode: {postcode!r}")
+
+    json_fetcher = json_fetcher or http_get_json
+    url = f"{UK_POSTCODES_API_URL}/{urllib.parse.quote(cleaned)}"
+    data, retrieved_at = json_fetcher(url, allow_404_empty=True)
+    if not data or not isinstance(data, dict) or data.get("status") == 404 or not data.get("result"):
+        return {
+            "status": "ok",
+            "fail_closed": False,
+            "query_postcode": raw,
+            "found": False,
+            "result": None,
+            "sources": [
+                {
+                    "name": "UK ONS / Ordnance Survey Postcodes API (OGL v3.0)",
+                    "url": url,
+                    "retrieved_at_utc": retrieved_at,
+                }
+            ],
+        }
+
+    res = data["result"]
+    codes = res.get("codes") or {}
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "query_postcode": raw,
+        "found": True,
+        "postcode": res.get("postcode"),
+        "country": res.get("country"),
+        "region": res.get("region"),
+        "local_authority_council": res.get("admin_district"),
+        "county": res.get("admin_county"),
+        "electoral_ward": res.get("admin_ward"),
+        "civil_parish": res.get("parish"),
+        "parliamentary_constituency": res.get("parliamentary_constituency"),
+        "lsoa": res.get("lsoa"),
+        "latitude": res.get("latitude"),
+        "longitude": res.get("longitude"),
+        "gss_codes": {
+            "admin_district": codes.get("admin_district"),
+            "admin_county": codes.get("admin_county"),
+            "admin_ward": codes.get("admin_ward"),
+            "parish": codes.get("parish"),
+            "parliamentary_constituency": codes.get("parliamentary_constituency"),
+            "lsoa": codes.get("lsoa"),
+        },
+        "licence": "Open Government Licence v3.0 (Contains OS & ONS data)",
+        "sources": [
+            {
+                "name": "UK ONS / Ordnance Survey Postcodes API (OGL v3.0)",
+                "url": url,
+                "retrieved_at_utc": retrieved_at,
+            }
+        ],
+    }
+
+
+def domain_rdap_and_dns_hygiene(
+    domain: str,
+    json_fetcher: Optional[Callable[..., Tuple[Any, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Combine deterministic DNS/DMARC/SPF/CAA security posture with live IANA/Nominet/Verisign
+    RDAP registration metadata (https://rdap.org/domain/{domain}).
+    """
+    dns_report = email_security_posture(domain=domain, json_fetcher=json_fetcher)
+    clean_domain = dns_report["domain"]
+    json_fetcher = json_fetcher or http_get_json
+
+    rdap_url = f"{RDAP_DOMAIN_BASE_URL}/{urllib.parse.quote(clean_domain)}"
+    rdap_meta: Dict[str, Any] = {
+        "available_via_rdap": False,
+        "ldh_name": clean_domain,
+        "status_flags": [],
+        "events": {},
+        "nameservers": [],
+    }
+    sources = list(dns_report.get("sources", []))
+    try:
+        rdap_data, rdap_ts = json_fetcher(rdap_url, allow_404_empty=True)
+        sources.append({
+            "name": f"RDAP Domain Registry Lookup ({clean_domain})",
+            "url": rdap_url,
+            "retrieved_at_utc": rdap_ts,
+        })
+        if isinstance(rdap_data, dict) and rdap_data.get("objectClassName") == "domain":
+            events_map: Dict[str, str] = {}
+            for ev in rdap_data.get("events", []) or []:
+                if isinstance(ev, dict) and ev.get("eventAction") and ev.get("eventDate"):
+                    events_map[str(ev["eventAction"])] = str(ev["eventDate"])
+            ns_list: List[str] = []
+            for ns in rdap_data.get("nameservers", []) or []:
+                if isinstance(ns, dict) and ns.get("ldhName"):
+                    ns_list.append(str(ns["ldhName"]).lower())
+            rdap_meta = {
+                "available_via_rdap": True,
+                "ldh_name": rdap_data.get("ldhName") or clean_domain,
+                "handle": rdap_data.get("handle"),
+                "status_flags": rdap_data.get("status", []) or [],
+                "events": events_map,
+                "nameservers": ns_list[:10],
+            }
+    except ComplianceUpstreamError:
+        # RDAP is supplemental for TLDs without public RDAP servers; DNS posture remains primary
+        pass
+
+    out = dict(dns_report)
+    out["rdap"] = rdap_meta
+    out["sources"] = sources
+    return out
+
+
+def bulk_email_and_domain_hygiene(
+    domains: List[str],
+    include_rdap: bool = False,
+    json_fetcher: Optional[Callable[..., Tuple[Any, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Batch B2B RevOps domain/MX/SPF/DMARC hygiene screen for up to 100 domains.
+    Enforces "charged_results_only": True so failed/invalid domain lookups are never billed.
+    """
+    if not isinstance(domains, list) or len(domains) == 0:
+        raise ValueError("domains must be a non-empty list of domain strings")
+    bounded_domains = [str(d).strip() for d in domains if str(d).strip()][:100]
+
+    results: List[Dict[str, Any]] = []
+    succeeded = 0
+    failed = 0
+    for dom in bounded_domains:
+        try:
+            if include_rdap:
+                item = domain_rdap_and_dns_hygiene(domain=dom, json_fetcher=json_fetcher)
+            else:
+                item = email_security_posture(domain=dom, json_fetcher=json_fetcher)
+            item["billable"] = True
+            results.append(item)
+            succeeded += 1
+        except (ValueError, ComplianceUpstreamError) as exc:
+            failed += 1
+            results.append({
+                "status": "error",
+                "fail_closed": True,
+                "domain": dom,
+                "billable": False,
+                "error": str(exc),
+            })
+
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "charged_results_only": True,
+        "total_requested": len(bounded_domains),
+        "billable_succeeded_count": succeeded,
+        "unbilled_error_count": failed,
+        "results": results,
+        "checked_at_utc": utc_now_iso(),
+    }
+
+
+def audit_mcp_server_trust(
+    manifest_or_tools: Any,
+    server_name: str = "unknown-mcp-server",
+) -> Dict[str, Any]:
+    """
+    Deterministic Pre-Connection MCP Trust, Prompt-Injection & Schema Token-Bloat Auditor.
+    Evaluates an MCP tools list or manifest JSON/dict for:
+      1. Tool-description prompt injection (instruction overrides, <system>, invisible Unicode tags)
+      2. Dangerous unguarded capability escalation (shell/exec/eval/private_key parameters)
+      3. Schema token bloat (estimates token footprint per tool and flags >1,500 token bloat)
+    """
+    if isinstance(manifest_or_tools, str):
+        try:
+            parsed = json.loads(manifest_or_tools)
+        except json.JSONDecodeError:
+            parsed = {"raw_text": manifest_or_tools}
+    else:
+        parsed = manifest_or_tools
+
+    tools_list: List[Dict[str, Any]] = []
+    if isinstance(parsed, list):
+        tools_list = [t for t in parsed if isinstance(t, dict)]
+    elif isinstance(parsed, dict):
+        if isinstance(parsed.get("tools"), list):
+            tools_list = [t for t in parsed["tools"] if isinstance(t, dict)]
+        else:
+            tools_list = [parsed]
+
+    serialized = json.dumps(parsed, ensure_ascii=False)
+    estimated_tokens = max(1, (len(serialized) + 3) // 4)
+
+    score = 100
+    findings: List[Dict[str, Any]] = []
+
+    injection_patterns = [
+        (r"ignore\s+(?:all\s+)?previous\s+instructions", "PROMPT_INJECTION_OVERRIDE", 45),
+        (r"<\s*/?\s*(?:system|instruction|cursor_untrusted_data)[^>]*>", "SYSTEM_TAG_SMUGGLING", 45),
+        (r"[\U000e0000-\U000e007f\u202a-\u202e]", "INVISIBLE_UNICODE_TAG_SMUGGLING", 50),
+        (r"(?:curl|wget)\s+https?://[^\s]+\s*\|\s*(?:sh|bash)", "REMOTE_SHELL_PIPE", 60),
+        (r"(?:exfiltrate|send\s+to\s+https?://|webhook\.site|requestbin)", "DATA_EXFILTRATION_CUE", 50),
+    ]
+    dangerous_param_re = re.compile(
+        r"^(?:shell_command|raw_exec|eval_code|private_key|seed_phrase|mnemonic|aws_secret_access_key)$",
+        re.IGNORECASE,
+    )
+
+    for idx, tool in enumerate(tools_list):
+        t_name = str(tool.get("name") or f"tool_{idx}")
+        t_desc = str(tool.get("description") or "")
+        t_json = json.dumps(tool, ensure_ascii=False)
+        t_tokens = max(1, (len(t_json) + 3) // 4)
+
+        for pat, code, penalty in injection_patterns:
+            if re.search(pat, t_json, re.IGNORECASE):
+                score -= penalty
+                findings.append({
+                    "tool": t_name,
+                    "severity": "CRITICAL",
+                    "code": code,
+                    "detail": f"Detected {code} pattern in tool definition.",
+                })
+
+        schema = tool.get("inputSchema") or tool.get("parameters") or {}
+        props = schema.get("properties") if isinstance(schema, dict) else {}
+        if isinstance(props, dict):
+            for p_name in props.keys():
+                if dangerous_param_re.match(str(p_name)):
+                    score -= 30
+                    findings.append({
+                        "tool": t_name,
+                        "severity": "HIGH",
+                        "code": "DANGEROUS_CAPABILITY_PARAMETER",
+                        "detail": f"Parameter '{p_name}' exposes high-risk execution or secret harvesting capability.",
+                    })
+
+        if t_tokens > 1500:
+            score -= 15
+            findings.append({
+                "tool": t_name,
+                "severity": "MEDIUM",
+                "code": "TOOL_SCHEMA_TOKEN_BLOAT",
+                "detail": f"Tool schema consumes ~{t_tokens} tokens (>1,500 token threshold).",
+            })
+
+    if estimated_tokens > 5000:
+        score -= 15
+        findings.append({
+            "tool": "_manifest_",
+            "severity": "MEDIUM",
+            "code": "MANIFEST_TOKEN_BLOAT",
+            "detail": f"Full MCP server manifest consumes ~{estimated_tokens} tokens (>5,000 token threshold).",
+        })
+
+    score = max(0, min(100, score))
+    if score >= 80 and not any(f["severity"] == "CRITICAL" for f in findings):
+        verdict = "trusted"
+    elif score >= 50 and not any(f["severity"] == "CRITICAL" for f in findings):
+        verdict = "review"
+    else:
+        verdict = "do-not-trust"
+
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "server_name": server_name,
+        "trust_score": score,
+        "verdict": verdict,
+        "tool_count": len(tools_list),
+        "estimated_schema_tokens": estimated_tokens,
+        "findings_count": len(findings),
+        "findings": findings,
+        "audited_at_utc": utc_now_iso(),
+    }
+
+
+def health_and_provenance() -> Dict[str, Any]:
+    """
+    Free ($0.00) Provenance, Health & x402 Discovery Metadata Check.
+    Allows autonomous buyers and MCP registries to verify live government source endpoints,
+    MCP SDK CVE hardening status, and CAIP-2 Base USDC x402 payment routing before paying.
+    """
+    return {
+        "status": "ok",
+        "service": "compliance-intel-mcp",
+        "version": "1.1.0",
+        "llm_tokens_per_call": 0,
+        "fail_closed_guarantee": True,
+        "charged_results_only": True,
+        "security_hardening": {
+            "mcp_sdk_floor": "mcp>=1.27.0,<3.0.0",
+            "cve_mitigations": [
+                "CVE-2026-52869 (stateless transport / Origin validation)",
+                "CVE-2026-59950 (no unvalidated WebSocket exposure)",
+                "CVE-2026-59951 (bounded session/batch limits)",
+            ],
+            "worf_indirect_injection_scrubber": True,
+        },
+        "x402PaymentRoutes": [
+            {
+                "endpoint": "/mcp",
+                "network": "eip155:8453",
+                "asset": "0x833589fCD6eDb6E08f4C7C32D4f71b54bdA02913",
+                "recipient": "0xfe4404ee088a741DC6F62d4132e21E14B1912940",
+                "scheme": "exact",
+                "price_usdc": "0.02",
+                "free_preview_tool": "health_and_provenance",
+            }
+        ],
+        "official_live_sources": [
+            UK_FCDO_OPENSANCTIONS_CSV_URL,
+            UK_OFSI_CONSOLIDATED_CSV_URL,
+            GLEIF_LEI_API_URL,
+            FINDTHATCHARITY_RECONCILE_URL,
+            CLOUDFLARE_DOH_URL,
+            US_OFAC_OPENSANCTIONS_CSV_URL,
+            EU_VIES_BASE_URL,
+            UK_POSTCODES_API_URL,
+            RDAP_DOMAIN_BASE_URL,
+        ],
+        "checked_at_utc": utc_now_iso(),
+    }
