@@ -23,6 +23,7 @@ from compliance_engine import (
     audit_mcp_server_trust as _audit_mcp_server_trust,
     lint_apify_mcp_input_schema as _lint_apify_mcp_input_schema,
     extract_uk_scanned_pdf_clauses as _extract_uk_scanned_pdf_clauses,
+    search_uk_property_tribunal_rro_precedents as _search_uk_property_tribunal_rro_precedents,
     bulk_email_and_domain_hygiene as _bulk_email_and_domain_hygiene,
     domain_rdap_and_dns_hygiene as _domain_rdap_and_dns_hygiene,
     email_security_posture as _email_security_posture,
@@ -354,6 +355,45 @@ def extract_uk_scanned_pdf_clauses(
         semantic_query=semantic_query,
         top_k=top_k,
     )
+
+
+
+@mcp.tool()
+def search_uk_property_tribunal_rro_precedents(
+    query: str = "",
+    region: str = "all",
+    offence_type: str = "all",
+    mitigation: str = "all",
+    max_pct: Optional[float] = None,
+    max_results: int = 25,
+) -> Dict[str, Any]:
+    """
+    Search UK First-tier Tribunal (Property Chamber) Rent Repayment Order (RRO) precedent decisions
+    (Open Government Licence v3.0) by borough/keyword, region, offence type (HMO licensing s.72,
+    Selective licensing s.95, unlawful eviction), mitigation factors, and maximum award percentage.
+    Returns matched case references, claimed vs awarded GBP, award % of rent, judge summaries, and GOV.UK PDF URLs.
+    """
+    try:
+        return _search_uk_property_tribunal_rro_precedents(
+            query=query,
+            region=region,
+            offence_type=offence_type,
+            mitigation=mitigation,
+            max_pct=max_pct,
+            max_results=max_results,
+        )
+    except (ValueError, ComplianceUpstreamError) as exc:
+        return {
+            "status": "error",
+            "fail_closed": True,
+            "query": query,
+            "error": {
+                "type": type(exc).__name__,
+                "message": str(exc),
+                "source_url": getattr(exc, "source_url", None),
+                "status_code": getattr(exc, "status_code", None),
+            },
+        }
 
 
 def main() -> None:

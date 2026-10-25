@@ -27,6 +27,7 @@ from compliance_engine import (
     audit_mcp_server_trust,
     lint_apify_mcp_input_schema,
     extract_uk_scanned_pdf_clauses,
+    search_uk_property_tribunal_rro_precedents,
     bulk_email_and_domain_hygiene,
     domain_rdap_and_dns_hygiene,
     email_security_posture,
@@ -97,6 +98,22 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     if action == "bulk_email_and_domain_hygiene":
         domain_list = domains if isinstance(domains, list) and domains else [str(domain or entity_name).strip()]
         return [bulk_email_and_domain_hygiene(domains=domain_list, include_rdap=include_rdap)]
+    if action == "search_uk_property_tribunal_rro_precedents":
+        q_rro = str(actor_input.get("query") or actor_input.get("entity_name") or "").strip()
+        if q_rro == "Oxfam" and "query" not in actor_input and "entity_name" not in actor_input:
+            q_rro = ""
+        max_pct_raw = actor_input.get("max_pct")
+        max_pct_val = float(max_pct_raw) if max_pct_raw is not None and str(max_pct_raw).strip() != "" else None
+        return [
+            search_uk_property_tribunal_rro_precedents(
+                query=q_rro,
+                region=str(actor_input.get("region") or "all"),
+                offence_type=str(actor_input.get("offence_type") or "all"),
+                mitigation=str(actor_input.get("mitigation") or "all"),
+                max_pct=max_pct_val,
+                max_results=max_results,
+            )
+        ]
     if action == "extract_uk_scanned_pdf_clauses":
         return [
             extract_uk_scanned_pdf_clauses(

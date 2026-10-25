@@ -468,3 +468,31 @@ def test_multi_tenant_zero_cross_contamination_isolation() -> None:
     # Verify zero leftover isolated_pdf_* temp directories exist on disk
     leftover = glob.glob(os.path.join(tempfile.gettempdir(), "isolated_pdf_*"))
     assert leftover == []
+
+
+def test_search_uk_property_tribunal_rro_precedents_local_and_api() -> None:
+    # 1. Test via MCP tool (uses local read-only SQLite DB when present on box or live API fallback)
+    res = mcp_server.search_uk_property_tribunal_rro_precedents(
+        query="Ealing",
+        region="London",
+        max_results=5,
+    )
+    assert res["status"] == "ok"
+    assert res["fail_closed"] is False
+    assert res["isolation_mode"] == "OGL-v3.0-read-only"
+    assert res["stats"]["total_matched"] >= 1
+    assert any("LON/00AJ/HMG/2025/0666" in r["case_ref"] for r in res["results"])
+    assert all(s["url"].startswith("https://") for s in res["sources"])
+
+    # 2. Test Actor action dispatch for Tool #15
+    items = execute_actor_action(
+        {
+            "action": "search_uk_property_tribunal_rro_precedents",
+            "entity_name": "Ealing",
+            "region": "London",
+            "max_results": 3,
+        }
+    )
+    assert len(items) == 1
+    assert items[0]["status"] == "ok"
+    assert items[0]["stats"]["total_matched"] >= 1

@@ -22,7 +22,8 @@
         "screen_us_ofac_sanctions",
         "lookup_uk_public_registries",
         "us_regulatory_recall_and_enforcement_check",
-        "extract_uk_scanned_pdf_clauses"
+        "extract_uk_scanned_pdf_clauses",
+        "search_uk_property_tribunal_rro_precedents"
       ]
     },
     "entity_name": {
@@ -124,6 +125,24 @@
       "type": "string",
       "description": "Optional raw legal clause text or document excerpt to analyze for S106 obligations, MR01 negative pledges, and Charity Examiner qualifications.",
       "editor": "textarea"
+    },
+    "region": {
+      "title": "UK Tribunal Region (for search_uk_property_tribunal_rro_precedents)",
+      "type": "string",
+      "description": "Optional UK First-tier Tribunal Property Chamber region filter (e.g. London, Southern, Midlands, Northern, Eastern, or all).",
+      "editor": "textfield"
+    },
+    "offence_type": {
+      "title": "RRO Offence Type Filter (for search_uk_property_tribunal_rro_precedents)",
+      "type": "string",
+      "description": "Optional Housing Act / Renters' Rights Act offence filter (e.g. HMO, Selective Licensing, Unlawful Eviction, or all).",
+      "editor": "textfield"
+    },
+    "mitigation": {
+      "title": "RRO Mitigation Factor Filter (for search_uk_property_tribunal_rro_precedents)",
+      "type": "string",
+      "description": "Optional mitigation factor filter (e.g. utilities_deducted, letting_agent_reliance, financial_hardship, prompt_remediation, or all).",
+      "editor": "textfield"
     }
   },
   "required": [

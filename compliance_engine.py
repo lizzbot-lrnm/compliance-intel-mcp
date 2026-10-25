@@ -46,6 +46,7 @@ OPENFDA_ENFORCEMENT_URLS = {
 }
 CPSC_RECALL_URL = "https://www.saferproducts.gov/RestWebServices/Recall"
 NHTSA_RECALL_URL = "https://api.nhtsa.gov/recalls/recallsByVehicle"
+UK_RRO_SEARCH_API_URL = "https://parish.technoplusit.co.uk/api/rro-search"
 
 
 class ComplianceUpstreamError(RuntimeError):
@@ -1552,6 +1553,7 @@ def health_and_provenance() -> Dict[str, Any]:
             EU_VIES_BASE_URL,
             UK_POSTCODES_API_URL,
             RDAP_DOMAIN_BASE_URL,
+            UK_RRO_SEARCH_API_URL,
         ],
         "checked_at_utc": utc_now_iso(),
     }
@@ -1746,3 +1748,122 @@ def extract_uk_scanned_pdf_clauses(
         semantic_query=semantic_query,
         top_k=top_k,
     )
+
+
+def search_uk_property_tribunal_rro_precedents(
+    query: str = "",
+    region: str = "all",
+    offence_type: str = "all",
+    mitigation: str = "all",
+    max_pct: Optional[float] = None,
+    max_results: int = 25,
+    json_fetcher: Optional[Callable[..., Tuple[Any, str]]] = None,
+) -> Dict[str, Any]:
+    """
+    Search UK First-tier Tribunal (Property Chamber) Rent Repayment Order (RRO) & Housing Act 2004 /
+    Housing and Planning Act 2016 / Renters' Rights Act 2026 precedent decisions (Open Government
+    Licence v3.0). Queries the local read-only SQLite FTS5 + 64-dim vector index if available, or
+    falls back to the live public API (https://parish.technoplusit.co.uk/api/rro-search).
+    """
+    from pathlib import Path
+    import sys
+
+    q_clean = (query or "").strip()
+    reg_clean = (region or "all").strip()
+    off_clean = (offence_type or "all").strip()
+    mit_clean = (mitigation or "all").strip()
+    limit_clamped = max(1, min(int(max_results or 25), 100))
+    now_ts = utc_now_iso()
+
+    params: Dict[str, str] = {}
+    if q_clean:
+        params["q"] = q_clean
+    if reg_clean and reg_clean.lower() != "all":
+        params["region"] = reg_clean
+    if off_clean and off_clean.lower() != "all":
+        params["offence_type"] = off_clean
+    if mit_clean and mit_clean.lower() != "all":
+        params["mitigation"] = mit_clean
+    if max_pct is not None:
+        params["max_pct"] = str(max_pct)
+
+    qs = urllib.parse.urlencode(params)
+    api_url = f"{UK_RRO_SEARCH_API_URL}?{qs}" if qs else UK_RRO_SEARCH_API_URL
+
+    # If custom json_fetcher isn't injected and local read-only SQLite DB exists on box, use fast local engine
+    rro_repo = Path("/workspace/revenue/uk-property-tribunal-rro-finder")
+    rro_db = rro_repo / "data" / "rro_precedents.sqlite"
+    if json_fetcher is None and rro_db.exists():
+        try:
+            if str(rro_repo) not in sys.path:
+                sys.path.insert(0, str(rro_repo))
+            import rro_engine  # type: ignore
+
+            local_res = rro_engine.search_rro_precedents(
+                q=q_clean,
+                region=reg_clean,
+                offence_type=off_clean,
+                mitigation=mit_clean,
+                max_pct=max_pct,
+                limit=limit_clamped,
+                db_path=rro_db,
+            )
+            return {
+                "status": "ok",
+                "fail_closed": False,
+                "isolation_mode": local_res.get("isolation_mode", "OGL-v3.0-read-only"),
+                "licence": "Open Government Licence v3.0 (GOV.UK First-tier Tribunal Property Chamber)",
+                "query": local_res.get("query", {}),
+                "stats": local_res.get("stats", {}),
+                "results": local_res.get("results", [])[:limit_clamped],
+                "checked_at_utc": now_ts,
+                "sources": [
+                    {
+                        "name": "UK First-tier Tribunal (Property Chamber) RRO Precedents Index (OGL v3.0)",
+                        "url": api_url,
+                        "retrieved_at_utc": now_ts,
+                    },
+                    {
+                        "name": "GOV.UK Residential Property Tribunal Decisions",
+                        "url": "https://www.gov.uk/residential-property-tribunal-decisions",
+                        "retrieved_at_utc": now_ts,
+                    },
+                ],
+            }
+        except Exception:
+            pass
+
+    fetcher = json_fetcher or http_get_json
+    data, retrieved_at = fetcher(api_url)
+    if not isinstance(data, dict) or data.get("status") != "ok":
+        raise ComplianceUpstreamError(
+            f"Malformed or error payload from UK Property Tribunal RRO API: {api_url}",
+            source_url=api_url,
+        )
+
+    results = data.get("results") or []
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "isolation_mode": data.get("isolation_mode", "OGL-v3.0-read-only"),
+        "licence": data.get(
+            "licence",
+            "Open Government Licence v3.0 (GOV.UK First-tier Tribunal Property Chamber)",
+        ),
+        "query": data.get("query", {}),
+        "stats": data.get("stats", {}),
+        "results": results[:limit_clamped],
+        "checked_at_utc": retrieved_at,
+        "sources": [
+            {
+                "name": "UK First-tier Tribunal (Property Chamber) RRO Precedents API (OGL v3.0)",
+                "url": api_url,
+                "retrieved_at_utc": retrieved_at,
+            },
+            {
+                "name": "GOV.UK Residential Property Tribunal Decisions",
+                "url": "https://www.gov.uk/residential-property-tribunal-decisions",
+                "retrieved_at_utc": retrieved_at,
+            },
+        ],
+    }
