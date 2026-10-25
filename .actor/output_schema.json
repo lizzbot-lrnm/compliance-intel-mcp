@@ -1,0 +1,14 @@
+{
+  "actorOutputSchemaVersion": 1,
+  "title": "Compliance & Property Tribunal Intelligence Output",
+  "description": "Structured UK, EU & US compliance screening and UK Property Tribunal Rent Repayment Order precedent results stored in the default dataset.",
+  "type": "object",
+  "properties": {
+    "results": {
+      "type": "string",
+      "title": "Compliance & Tribunal Results",
+      "description": "Dataset items returned by the compliance screening or UK Property Tribunal RRO precedent search.",
+      "template": "{{links.apiDefaultDatasetUrl}}/items"
+    }
+  }
+}

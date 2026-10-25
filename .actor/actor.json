@@ -16,57 +16,9 @@
     "templateId": "python-start"
   },
   "input": "./input_schema.json",
+  "output": "./output_schema.json",
   "dockerfile": "../Dockerfile",
   "storages": {
-    "dataset": {
-      "actorSpecification": 1,
-      "title": "Compliance & Security Screening Results",
-      "views": {
-        "overview": {
-          "title": "Overview",
-          "transformation": {
-            "fields": [
-              "status",
-              "screened_at_utc",
-              "input",
-              "summary",
-              "uk_sanctions",
-              "uk_registries",
-              "vat_verification",
-              "uk_postcode_lookup",
-              "email_security_posture",
-              "us_ofac_sanctions",
-              "us_regulatory_recalls",
-              "sources"
-            ]
-          },
-          "display": {
-            "component": "table",
-            "properties": {
-              "status": {
-                "label": "Status",
-                "format": "text"
-              },
-              "screened_at_utc": {
-                "label": "Screened At (UTC)",
-                "format": "text"
-              },
-              "input": {
-                "label": "Input",
-                "format": "object"
-              },
-              "summary": {
-                "label": "Risk Summary",
-                "format": "object"
-              },
-              "sources": {
-                "label": "Live Sources",
-                "format": "array"
-              }
-            }
-          }
-        }
-      }
-    }
+    "dataset": "./dataset_schema.json"
   }
 }
