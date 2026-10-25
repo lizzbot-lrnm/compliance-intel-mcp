@@ -42,6 +42,11 @@ import uuid
 from pathlib import Path
 from typing import Any
 
+import sys as _sys
+_LOCAL_VENV_SITE = str(Path(__file__).resolve().parent / ".venv/lib/python3.13/site-packages")
+if Path(_LOCAL_VENV_SITE).is_dir() and _LOCAL_VENV_SITE not in _sys.path:
+    _sys.path.insert(0, _LOCAL_VENV_SITE)
+
 import numpy as np
 import pypdfium2 as pdfium
 import sqlite_vec

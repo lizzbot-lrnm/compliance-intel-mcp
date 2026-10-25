@@ -1791,7 +1791,7 @@ def search_uk_property_tribunal_rro_precedents(
     api_url = f"{UK_RRO_SEARCH_API_URL}?{qs}" if qs else UK_RRO_SEARCH_API_URL
 
     # If custom json_fetcher isn't injected and local read-only SQLite DB exists on box, use fast local engine
-    rro_repo = Path("/workspace/revenue/uk-property-tribunal-rro-finder")
+    rro_repo = Path("./revenue/uk-property-tribunal-rro-finder")
     rro_db = rro_repo / "data" / "rro_precedents.sqlite"
     if json_fetcher is None and rro_db.exists():
         try:

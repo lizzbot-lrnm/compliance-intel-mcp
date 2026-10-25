@@ -13,6 +13,12 @@ from __future__ import annotations
 import argparse
 from typing import Any, Dict, List, Optional
 
+from pathlib import Path as _Path
+import sys as _sys
+_LOCAL_VENV_SITE = str(_Path(__file__).resolve().parent / ".venv/lib/python3.13/site-packages")
+if _Path(_LOCAL_VENV_SITE).is_dir() and _LOCAL_VENV_SITE not in _sys.path:
+    _sys.path.insert(0, _LOCAL_VENV_SITE)
+
 try:
     from mcp.server.mcpserver import MCPServer as _MCPServerClass
 except ImportError:
