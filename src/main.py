@@ -210,14 +210,14 @@ async def main() -> None:
                 if item.get("status") == "error" and item.get("fail_closed"):
                     Actor.log.warning(f"Upstream check reported fail_closed error: {item.get('error')}")
                     if strict_fail:
-                        await Actor.push_data(item)
+                        await Actor.push_data({k: v for k, v in item.items() if v is not None})
                         await Actor.fail(status_message=str(item.get("error", {}).get("message", "Failed closed")))
                         return
                     fallback = health_and_provenance()
                     fallback["upstream_diagnostic"] = item.get("error")
                     fallback["input"] = actor_input
                     item = fallback
-                await Actor.push_data(item)
+                await Actor.push_data({k: v for k, v in item.items() if v is not None})
             await Actor.set_value("OUTPUT", items[0] if len(items) == 1 else items)
             Actor.log.info(f"Successfully pushed {len(items)} compliance report(s) to default dataset.")
     except ImportError:

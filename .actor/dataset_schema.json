@@ -6,73 +6,113 @@
     "type": "object",
     "properties": {
       "status": {
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "title": "Status",
         "description": "Execution status of the compliance or precedent check (ok or error).",
         "example": "ok"
       },
       "screened_at_utc": {
-        "type": "string",
+        "type": [
+          "string",
+          "null"
+        ],
         "title": "Screened At (UTC)",
         "description": "ISO-8601 UTC timestamp when the screening was performed.",
         "example": "2026-10-25T10:00:00Z"
       },
       "input": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "Input Parameters",
         "description": "Normalized input parameters used for the screening request."
       },
       "summary": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "Risk Summary",
         "description": "Aggregated risk level, sanctions match flags, and email security grade."
       },
       "uk_sanctions": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "UK FCDO & OFSI Sanctions",
         "description": "Matches against the live UK FCDO Sanctions List and HM Treasury OFSI Consolidated List."
       },
       "uk_registries": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "UK Corporate & Charity Registries",
         "description": "Matches from UK Companies House, Charity Commission, and GLEIF LEI."
       },
       "vat_verification": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "EU VIES & UK HMRC VAT",
         "description": "Validation result from the European Commission VIES API or UK HMRC Modulo-97 check."
       },
       "uk_postcode_lookup": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "UK ONS/OS Postcode & Council",
         "description": "Local Authority Council, Civil Parish, Electoral Ward, and ONS GSS codes."
       },
       "email_security_posture": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "Email & DNS Security Posture",
         "description": "MX, SPF, DMARC, and CAA records audited via Cloudflare and Google DoH with 0-100 score."
       },
       "us_ofac_sanctions": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "US Treasury OFAC SDN",
         "description": "Matches against the live US Treasury OFAC Specially Designated Nationals list."
       },
       "us_regulatory_recalls": {
-        "type": "object",
+        "type": [
+          "object",
+          "null"
+        ],
         "title": "US FDA, CPSC & NHTSA Recalls",
         "description": "Enforcement and recall records from openFDA, CPSC SaferProducts, and DOT NHTSA."
       },
       "results": {
-        "type": "array",
+        "type": [
+          "array",
+          "null"
+        ],
         "title": "Precedent / Batch Results",
         "description": "Matched UK Property Tribunal RRO precedent rulings or batch domain hygiene items."
       },
       "sources": {
-        "type": "array",
+        "type": [
+          "array",
+          "null"
+        ],
         "title": "Live Official Sources",
         "description": "Verbatim source URLs and ISO-8601 UTC retrieval timestamps."
       }
-    }
+    },
+    "additionalProperties": true
   },
   "views": {
     "overview": {
