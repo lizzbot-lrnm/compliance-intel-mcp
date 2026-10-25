@@ -7,8 +7,9 @@
       "title": "Screening Action",
       "type": "string",
       "description": "Select the full unified compliance screen or an individual deterministic check.",
-      "default": "uk_sanctions_and_company_screen",
+      "default": "screen_entity",
       "enum": [
+        "screen_entity",
         "uk_sanctions_and_company_screen",
         "health_and_provenance",
         "verify_eu_uk_vat",
@@ -24,7 +25,24 @@
         "us_regulatory_recall_and_enforcement_check",
         "extract_uk_scanned_pdf_clauses",
         "search_uk_property_tribunal_rro_precedents"
-      ]
+      ],
+      "prefill": "screen_entity"
+    },
+    "query": {
+      "title": "Search Query / Entity / IBAN / Keyword",
+      "type": "string",
+      "description": "Entity name, company, charity, IBAN, or compliance keyword to screen across UK, EU, and US public registries.",
+      "default": "iban",
+      "prefill": "iban",
+      "editor": "textfield"
+    },
+    "country": {
+      "title": "Jurisdiction / Country Filter",
+      "type": "string",
+      "description": "Target jurisdiction filter (ALL, UK, EU, US).",
+      "default": "ALL",
+      "prefill": "ALL",
+      "editor": "textfield"
     },
     "entity_name": {
       "title": "Entity / Individual / Product Name",
@@ -39,7 +57,8 @@
       "type": "string",
       "description": "Optional domain to audit RDAP, MX, SPF, DMARC, and CAA records over Cloudflare/Google DNS-over-HTTPS.",
       "default": "oxfam.org.uk",
-      "editor": "textfield"
+      "editor": "textfield",
+      "prefill": "oxfam.org.uk"
     },
     "domains": {
       "title": "Batch Domains List (for bulk_email_and_domain_hygiene)",
@@ -58,7 +77,8 @@
       "type": "string",
       "description": "Optional UK Charity registration number (e.g. 202918) or UK Companies House number (e.g. 00612172).",
       "default": "202918",
-      "editor": "textfield"
+      "editor": "textfield",
+      "prefill": "202918"
     },
     "vat_number": {
       "title": "EU or UK VAT Number (e.g. IE6388047V or GB999999973)",
@@ -113,7 +133,8 @@
       "description": "Maximum number of matched records to return per data source (clamped 1..50).",
       "default": 5,
       "minimum": 1,
-      "maximum": 50
+      "maximum": 50,
+      "prefill": 5
     },
     "pdf_url": {
       "title": "PDF URL (for extract_uk_scanned_pdf_clauses)",
