@@ -5,3 +5,6 @@ __pycache__/
 storage/
 apify_storage/
 .env
+
+.apify_*
+*.token
