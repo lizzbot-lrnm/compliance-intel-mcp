@@ -2,9 +2,9 @@
   "actorSpecification": 1,
   "name": "compliance-intel-mcp",
   "title": "UK & US Statutory Compliance & Property Tribunal MCP Server",
-  "description": "Deterministic zero-LLM UK, EU & US statutory compliance & property tribunal MCP server (15 tools): UK First-tier Tribunal Rent Repayment Order (RRO) precedents, UK FCDO/OFSI & US OFAC sanctions, EU VIES/UK VAT, UK Companies House/Charity & GLEIF LEI, ONS Postcodes, RDAP/DMARC/SPF hygiene, FDA/CPSC/NHTSA recalls, Scanned PDF S106/MR01 clause extractor, and MCP Trust Auditor.",
+  "description": "Deterministic 15-tool UK, EU & US compliance & property tribunal MCP server: UK RRO precedents, OFSI/OFAC sanctions, EU VIES/UK VAT, Companies House/Charity & LEI, ONS Postcodes, RDAP/DMARC hygiene, FDA/CPSC/NHTSA recalls, S106/MR01 PDF clauses & MCP trust.",
   "seoTitle": "UK & US Statutory Compliance & Property Tribunal MCP Server",
-  "seoDescription": "15 deterministic UK/EU/US compliance & legal tools: UK Property Tribunal RRO precedents, OFSI/OFAC sanctions, EU VIES/UK VAT, Companies House/LEI, RDAP/DMARC, S106/MR01 PDF clauses & MCP trust.",
+  "seoDescription": "15 deterministic UK/EU/US compliance tools: UK Property Tribunal RRO precedents, OFSI/OFAC sanctions, EU VIES/UK VAT, Companies House/LEI, RDAP/DMARC & PDF clauses.",
   "categories": [
     "BUSINESS",
     "LEAD_GENERATION",
