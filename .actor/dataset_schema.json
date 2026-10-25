@@ -3,7 +3,6 @@
   "title": "Compliance & Security Screening Results",
   "description": "Deterministic UK, EU & US compliance screening, sanctions, VAT, registry, DNS security, and UK Property Tribunal RRO precedent records.",
   "fields": {
-    "$schema": "https://json-schema.org/draft/2020-12/schema",
     "type": "object",
     "properties": {
       "status": {
