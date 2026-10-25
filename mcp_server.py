@@ -22,6 +22,7 @@ from compliance_engine import (
     ComplianceUpstreamError,
     audit_mcp_server_trust as _audit_mcp_server_trust,
     lint_apify_mcp_input_schema as _lint_apify_mcp_input_schema,
+    extract_uk_scanned_pdf_clauses as _extract_uk_scanned_pdf_clauses,
     bulk_email_and_domain_hygiene as _bulk_email_and_domain_hygiene,
     domain_rdap_and_dns_hygiene as _domain_rdap_and_dns_hygiene,
     email_security_posture as _email_security_posture,
@@ -325,6 +326,33 @@ def lint_apify_mcp_input_schema(
     return _lint_apify_mcp_input_schema(
         input_schema_or_json=input_schema_json,
         auto_fix_strategy=auto_fix_strategy,
+    )
+
+
+@mcp.tool()
+def extract_uk_scanned_pdf_clauses(
+    pdf_path: Optional[str] = None,
+    pdf_base64: Optional[str] = None,
+    pdf_url: Optional[str] = None,
+    raw_text: Optional[str] = None,
+    document_type: str = "auto",
+    semantic_query: Optional[str] = None,
+    top_k: int = 5,
+) -> Dict[str, Any]:
+    """
+    Zero-Token UK Scanned PDF & Legal Deed Clause Extractor (pdftotext + pypdfium2 + RapidOCR +
+    local FastEmbed BAAI/bge-small-en-v1.5 + ephemeral in-memory sqlite-vec). Extracts Section 106
+    (S106) financial contributions & triggers, Companies House MR01 negative pledge / floating charge
+    covenants, and Charity Independent Examiner qualifications with strict per-request tenant isolation.
+    """
+    return _extract_uk_scanned_pdf_clauses(
+        pdf_path=pdf_path,
+        pdf_base64=pdf_base64,
+        pdf_url=pdf_url,
+        raw_text=raw_text,
+        document_type=document_type,
+        semantic_query=semantic_query,
+        top_k=top_k,
     )
 
 

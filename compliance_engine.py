@@ -1717,3 +1717,32 @@ def lint_apify_mcp_input_schema(
         "reference_url": "https://docs.apify.com/platform/actors/development/actor-definition/input-schema/specification/v1",
         "audited_at_utc": utc_now_iso(),
     }
+
+
+def extract_uk_scanned_pdf_clauses(
+    pdf_path: Optional[str] = None,
+    pdf_base64: Optional[str] = None,
+    pdf_url: Optional[str] = None,
+    raw_text: Optional[str] = None,
+    document_type: str = "auto",
+    semantic_query: Optional[str] = None,
+    top_k: int = 5,
+) -> Dict[str, Any]:
+    """
+    Zero-Token UK Scanned PDF & Deed Clause Extractor (Stage 1: pdftotext + pypdfium2 + RapidOCR;
+    Stage 2: FastEmbed BAAI/bge-small-en-v1.5 + ephemeral in-memory sqlite-vec; Stage 3: Surgical
+    extraction of Section 106 developer contributions/triggers, Companies House MR01 charge negative
+    pledges/floating charges/caps, and Charity Independent Examiner qualifications/reserves deficits).
+    Enforces strict per-request ephemeral isolation (zero shared DB, zero shared vector index, zero temp files).
+    """
+    from pdf_clause_extractor import extract_uk_scanned_pdf_clauses as _extract_impl
+
+    return _extract_impl(
+        pdf_path=pdf_path,
+        pdf_base64=pdf_base64,
+        pdf_url=pdf_url,
+        raw_text=raw_text,
+        document_type=document_type,
+        semantic_query=semantic_query,
+        top_k=top_k,
+    )

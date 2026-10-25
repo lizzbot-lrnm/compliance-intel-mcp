@@ -356,3 +356,115 @@ def test_lint_apify_mcp_input_schema_and_self_check() -> None:
     assert bug_res["critical_required_default_traps"] == 1
     assert bug_res["fixed_input_schema"]["properties"]["query"]["prefill"] == "example"
     assert "default" not in bug_res["fixed_input_schema"]["properties"]["query"]
+
+
+def test_extract_uk_scanned_pdf_clauses_born_digital_and_scanned_ocr() -> None:
+    import base64
+    import pdf_clause_extractor as pce
+
+    dig_bytes = pce.generate_sample_born_digital_pdf_bytes()
+    scan_bytes = pce.generate_sample_scanned_image_pdf_bytes()
+
+    # 1. Born-digital multi-page PDF (Stage 1 pdftotext fast path)
+    res_dig = mcp_server.extract_uk_scanned_pdf_clauses(
+        pdf_base64=base64.b64encode(dig_bytes).decode("ascii"),
+        document_type="auto",
+    )
+    assert res_dig["status"] == "ok"
+    assert res_dig["document_summary"]["total_pages"] == 2
+    assert res_dig["document_summary"]["born_digital_pages"] == 2
+    assert res_dig["document_summary"]["scanned_ocr_pages"] == 0
+    assert res_dig["extracted_clauses"]["s106_planning_obligations"]["obligations_count"] == 3
+    assert res_dig["extracted_clauses"]["s106_planning_obligations"]["total_quantified_contributions_gbp"] == 255900.0
+    assert res_dig["extracted_clauses"]["mr01_charge_covenants"]["has_negative_pledge"] is True
+    assert res_dig["extracted_clauses"]["mr01_charge_covenants"]["has_floating_charge"] is True
+    assert 2500000.0 in res_dig["extracted_clauses"]["mr01_charge_covenants"]["capped_facility_amounts_gbp"]
+    assert res_dig["extracted_clauses"]["charity_examiner_findings"]["opinion_classification"] == "QUALIFIED_OR_MATTER_OF_CONCERN"
+    assert res_dig["extracted_clauses"]["charity_examiner_findings"]["reserves_deficit_flagged"] is True
+    assert res_dig["benchmark_telemetry"]["llm_tokens_used"] == 0
+
+    # 2. 100% Scanned image-only multi-page PDF (0 digital chars -> pypdfium2 + RapidOCR fallback)
+    res_scan = mcp_server.extract_uk_scanned_pdf_clauses(
+        pdf_base64=base64.b64encode(scan_bytes).decode("ascii"),
+        document_type="auto",
+    )
+    assert res_scan["status"] == "ok"
+    assert res_scan["document_summary"]["total_pages"] == 2
+    assert res_scan["document_summary"]["born_digital_pages"] == 0
+    assert res_scan["document_summary"]["scanned_ocr_pages"] == 2
+    assert res_scan["extracted_clauses"]["s106_planning_obligations"]["obligations_count"] == 3
+    assert res_scan["extracted_clauses"]["s106_planning_obligations"]["total_quantified_contributions_gbp"] == 255900.0
+    assert res_scan["extracted_clauses"]["mr01_charge_covenants"]["has_negative_pledge"] is True
+    assert res_scan["extracted_clauses"]["mr01_charge_covenants"]["has_floating_charge"] is True
+    assert 2500000.0 in res_scan["extracted_clauses"]["mr01_charge_covenants"]["capped_facility_amounts_gbp"]
+    assert res_scan["extracted_clauses"]["charity_examiner_findings"]["opinion_classification"] == "QUALIFIED_OR_MATTER_OF_CONCERN"
+    assert res_scan["extracted_clauses"]["charity_examiner_findings"]["reserves_deficit_flagged"] is True
+    assert res_scan["benchmark_telemetry"]["llm_tokens_used"] == 0
+
+
+def test_multi_tenant_zero_cross_contamination_isolation() -> None:
+    import base64
+    import concurrent.futures
+    import glob
+    import os
+    import tempfile
+    import pdf_clause_extractor as pce
+
+    tenant_a_pdf = pce.generate_sample_born_digital_pdf_bytes(
+        [
+            "SECTION 106 PLANNING OBLIGATION DEED — CONFIDENTIAL REF TENANT_A_SECRET_99182\n\n"
+            "Clause 4.1 (Affordable Housing Contribution): The Owner covenants to pay the Affordable Housing "
+            "Contribution of £145,000 indexed to the BCIS All-In Tender Price Index prior to occupation of the 15th dwelling."
+        ]
+    )
+    tenant_b_pdf = pce.generate_sample_born_digital_pdf_bytes(
+        [
+            "COMPANIES HOUSE MR01 CHARGE DEED — CONFIDENTIAL REF TENANT_B_SECRET_77419\n\n"
+            "Clause 6.1 (Negative Pledge Covenant): The Chargor shall not create or permit to subsist any security "
+            "over its assets without prior written consent. Total principal liability is capped at £2,500,000."
+        ]
+    )
+
+    with concurrent.futures.ThreadPoolExecutor(max_workers=2) as pool:
+        fut_a = pool.submit(
+            mcp_server.extract_uk_scanned_pdf_clauses,
+            pdf_base64=base64.b64encode(tenant_a_pdf).decode("ascii"),
+            semantic_query="TENANT_B_SECRET_77419 negative pledge £2,500,000",
+        )
+        fut_b = pool.submit(
+            mcp_server.extract_uk_scanned_pdf_clauses,
+            pdf_base64=base64.b64encode(tenant_b_pdf).decode("ascii"),
+            semantic_query="TENANT_A_SECRET_99182 Affordable Housing £145,000",
+        )
+        res_a = fut_a.result()
+        res_b = fut_b.result()
+
+    dump_a = json.dumps(res_a)
+    dump_b = json.dumps(res_b)
+
+    # Strict cross-tenant non-contamination assertions
+    assert res_a["tenant_isolation_proof"]["isolation_context_id"] != res_b["tenant_isolation_proof"]["isolation_context_id"]
+    assert res_a["tenant_isolation_proof"]["shared_database_used"] is False
+    assert res_a["tenant_isolation_proof"]["shared_vector_index_used"] is False
+    assert res_a["tenant_isolation_proof"]["temp_dir_cryptographically_wiped_and_removed"] is True
+    assert res_a["tenant_isolation_proof"]["in_memory_vec_table_dropped_and_closed"] is True
+    assert res_b["tenant_isolation_proof"]["temp_dir_cryptographically_wiped_and_removed"] is True
+    assert res_b["tenant_isolation_proof"]["in_memory_vec_table_dropped_and_closed"] is True
+
+    # Neither tenant's document content, vectors, or extracted clauses can ever appear in the other's response
+    a_chunks_dump = json.dumps(res_a["semantic_search"]["top_semantic_matches"]) + json.dumps(res_a["extracted_clauses"])
+    assert "TENANT_B_SECRET_77419" not in a_chunks_dump
+    assert "2500000" not in a_chunks_dump
+    assert res_a["extracted_clauses"]["mr01_charge_covenants"]["has_negative_pledge"] is False
+    assert res_a["extracted_clauses"]["s106_planning_obligations"]["total_quantified_contributions_gbp"] == 145000.0
+
+    # Check that Tenant B's extracted chunks/clauses never contain Tenant A's secret or £145,000 S106 obligation
+    b_chunks_dump = json.dumps(res_b["semantic_search"]["top_semantic_matches"]) + json.dumps(res_b["extracted_clauses"])
+    assert "TENANT_A_SECRET_99182" not in b_chunks_dump
+    assert "145000" not in b_chunks_dump
+    assert res_b["extracted_clauses"]["s106_planning_obligations"]["total_quantified_contributions_gbp"] == 0.0
+    assert res_b["extracted_clauses"]["mr01_charge_covenants"]["has_negative_pledge"] is True
+
+    # Verify zero leftover isolated_pdf_* temp directories exist on disk
+    leftover = glob.glob(os.path.join(tempfile.gettempdir(), "isolated_pdf_*"))
+    assert leftover == []

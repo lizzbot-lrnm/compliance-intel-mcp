@@ -29,6 +29,7 @@ pricing:
       bulk_email_and_domain_hygiene: "0.02"
       audit_mcp_server_trust: "0.01"
       lint_apify_mcp_input_schema: "0.01"
+      extract_uk_scanned_pdf_clauses: "0.03"
       email_security_posture: "0.02"
       screen_uk_sanctions: "0.02"
       screen_us_ofac_sanctions: "0.02"
@@ -74,3 +75,6 @@ tools:
   - name: lint_apify_mcp_input_schema
     description: Lint and auto-fix Apify .actor/input_schema.json for the MCP required+default silent drop bug and maintenance prefill gaps.
     price: "0.01"
+  - name: extract_uk_scanned_pdf_clauses
+    description: Zero-token UK scanned PDF & legal deed clause extractor (pdftotext + pypdfium2 + RapidOCR + FastEmbed + ephemeral sqlite-vec) for Section 106 obligations, Companies House MR01 charge covenants, and Charity Independent Examiner reports.
+    price: "0.03"

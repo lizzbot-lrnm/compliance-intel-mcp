@@ -21,7 +21,8 @@
         "screen_uk_sanctions",
         "screen_us_ofac_sanctions",
         "lookup_uk_public_registries",
-        "us_regulatory_recall_and_enforcement_check"
+        "us_regulatory_recall_and_enforcement_check",
+        "extract_uk_scanned_pdf_clauses"
       ]
     },
     "entity_name": {
@@ -111,7 +112,21 @@
       "default": 5,
       "minimum": 1,
       "maximum": 50
+    },
+    "pdf_url": {
+      "title": "PDF URL (for extract_uk_scanned_pdf_clauses)",
+      "type": "string",
+      "description": "Optional public URL of a UK Section 106 Deed, Companies House MR01 Charge PDF, or Charity TAR PDF to extract clauses from.",
+      "editor": "textfield"
+    },
+    "raw_text": {
+      "title": "Raw Deed / Clause Text or Base64 PDF (for extract_uk_scanned_pdf_clauses)",
+      "type": "string",
+      "description": "Optional raw legal clause text or document excerpt to analyze for S106 obligations, MR01 negative pledges, and Charity Examiner qualifications.",
+      "editor": "textarea"
     }
   },
-  "required": ["entity_name"]
+  "required": [
+    "entity_name"
+  ]
 }

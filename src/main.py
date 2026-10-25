@@ -26,6 +26,7 @@ if str(ROOT_DIR) not in sys.path:
 from compliance_engine import (
     audit_mcp_server_trust,
     lint_apify_mcp_input_schema,
+    extract_uk_scanned_pdf_clauses,
     bulk_email_and_domain_hygiene,
     domain_rdap_and_dns_hygiene,
     email_security_posture,
@@ -96,6 +97,16 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     if action == "bulk_email_and_domain_hygiene":
         domain_list = domains if isinstance(domains, list) and domains else [str(domain or entity_name).strip()]
         return [bulk_email_and_domain_hygiene(domains=domain_list, include_rdap=include_rdap)]
+    if action == "extract_uk_scanned_pdf_clauses":
+        return [
+            extract_uk_scanned_pdf_clauses(
+                pdf_url=actor_input.get("pdf_url"),
+                pdf_base64=actor_input.get("pdf_base64"),
+                raw_text=actor_input.get("raw_text") or actor_input.get("query"),
+                document_type=str(actor_input.get("document_type") or "auto"),
+                semantic_query=actor_input.get("semantic_query"),
+            )
+        ]
     if action == "lint_apify_mcp_input_schema":
         schema_payload = actor_input.get("input_schema_json") or actor_input.get("manifest_or_tools") or actor_input.get("query") or "{}"
         strategy = str(actor_input.get("auto_fix_strategy") or "move_default_to_prefill")
