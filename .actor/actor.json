@@ -1,9 +1,9 @@
 {
   "actorSpecification": 1,
   "name": "uk-us-compliance-mcp-actor",
-  "title": "UK, EU & US Sanctions, VAT, Registry, RDAP/DNS & MCP Trust Screen",
-  "description": "Deterministic, zero-LLM-cost UK/EU/US compliance & security screen: UK FCDO/OFSI sanctions, UK Charity/Companies House & GLEIF LEI registries, EU VIES & UK HMRC VAT, UK Postcode OGL, RDAP + DNS/DMARC security posture (single & batch 100-domain mode), US OFAC SDN, US FDA/CPSC/NHTSA recalls, and MCP Trust Auditor.",
-  "seoTitle": "UK, EU & US Sanctions, VAT, Corporate Registry, DNS & MCP Compliance API",
+  "title": "UK, EU & US Sanctions, VAT, Registry, RDAP & MCP Screen",
+  "description": "Deterministic zero-LLM UK/EU/US compliance screen: UK OFSI & US OFAC sanctions, EU VIES/UK VAT, UK Companies House/Charity & GLEIF LEI registries, RDAP & DNS/DMARC security posture (single + 100-domain batch), FDA/CPSC/NHTSA recalls, and MCP Trust Auditor.",
+  "seoTitle": "UK, EU & US Sanctions, VAT, Corporate Registry & MCP API",
   "seoDescription": "Verify UK FCDO/OFSI & US OFAC sanctions, EU VIES/UK VAT, UK Companies House/Charity & GLEIF LEI, RDAP/DMARC/SPF email hygiene, FDA/CPSC/NHTSA recalls, and MCP server trust.",
   "categories": [
     "BUSINESS",
