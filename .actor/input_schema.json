@@ -31,7 +31,8 @@
       "type": "string",
       "description": "Organization, company, charity, person, or product name to screen.",
       "prefill": "Oxfam",
-      "editor": "textfield"
+      "editor": "textfield",
+      "default": "Oxfam"
     },
     "domain": {
       "title": "Domain Name (for RDAP, Email & DNS Security Posture)",
@@ -87,7 +88,7 @@
       "title": "Include US FDA / CPSC / NHTSA Recall & Enforcement Screen",
       "type": "boolean",
       "description": "Screen entity/product against live US FDA openFDA, CPSC SaferProducts, and NHTSA recall APIs.",
-      "default": true
+      "default": false
     },
     "vehicle_make": {
       "title": "Vehicle Make (Optional NHTSA Check)",
@@ -145,7 +146,5 @@
       "editor": "textfield"
     }
   },
-  "required": [
-    "entity_name"
-  ]
+  "required": []
 }

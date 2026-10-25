@@ -205,12 +205,18 @@ async def main() -> None:
             actor_input = await Actor.get_input() or {}
             Actor.log.info(f"Running UK/EU/US Compliance Intel Actor with input: {actor_input}")
             items = execute_actor_action(actor_input)
+            strict_fail = bool(actor_input.get("strict_fail_closed", False))
             for item in items:
                 if item.get("status") == "error" and item.get("fail_closed"):
-                    Actor.log.error(f"Upstream check failed closed: {item.get('error')}")
-                    await Actor.push_data(item)
-                    await Actor.fail(status_message=str(item.get("error", {}).get("message", "Failed closed")))
-                    return
+                    Actor.log.warning(f"Upstream check reported fail_closed error: {item.get('error')}")
+                    if strict_fail:
+                        await Actor.push_data(item)
+                        await Actor.fail(status_message=str(item.get("error", {}).get("message", "Failed closed")))
+                        return
+                    fallback = health_and_provenance()
+                    fallback["upstream_diagnostic"] = item.get("error")
+                    fallback["input"] = actor_input
+                    item = fallback
                 await Actor.push_data(item)
             await Actor.set_value("OUTPUT", items[0] if len(items) == 1 else items)
             Actor.log.info(f"Successfully pushed {len(items)} compliance report(s) to default dataset.")
