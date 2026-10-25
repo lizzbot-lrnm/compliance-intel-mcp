@@ -1555,3 +1555,165 @@ def health_and_provenance() -> Dict[str, Any]:
         ],
         "checked_at_utc": utc_now_iso(),
     }
+
+
+def lint_apify_mcp_input_schema(
+    input_schema_or_json: Any,
+    auto_fix_strategy: str = "move_default_to_prefill",
+) -> Dict[str, Any]:
+    """
+    Deterministic Apify `.actor/input_schema.json` -> MCP (`tools/list`) Silent Bug Linter & Auto-Fixer.
+    Detects:
+      1. CRITICAL (`APIFY_MCP_REQUIRED_WITH_DEFAULT_TRAP`): A field is listed in `required` AND also defines `default`.
+         Because `apify/apify-mcp-server` converts any field with a `default` into an optional parameter in `tools/list`,
+         MCP agents (Claude, Cursor, Grok Bot) omit the field at call time, while Apify's daily health check passes
+         because it injects `prefill`.
+      2. HIGH (`APIFY_MAINTENANCE_MISSING_PREFILL_ON_REQUIRED`): A required field has neither `prefill` nor `default`,
+         causing Apify's daily automated maintenance runner to fail and mark the Actor 'Under maintenance'.
+      3. MEDIUM (`UNDEFINED_REQUIRED_PROPERTY` / `SPARSE_MCP_TOOL_DESCRIPTION`): Schema or agent-readiness gaps.
+    Returns a 0-100 `mcp_compatibility_score`, `is_mcp_safe`, structured `issues`, and an auto-remediated `fixed_input_schema`.
+    """
+    import copy
+
+    if isinstance(input_schema_or_json, str):
+        try:
+            schema = json.loads(input_schema_or_json)
+        except Exception as exc:
+            return {
+                "status": "error",
+                "fail_closed": True,
+                "error": f"Invalid JSON input_schema: {exc}",
+                "is_mcp_safe": False,
+                "mcp_compatibility_score": 0,
+                "audited_at_utc": utc_now_iso(),
+            }
+    elif isinstance(input_schema_or_json, dict):
+        schema = copy.deepcopy(input_schema_or_json)
+    else:
+        return {
+            "status": "error",
+            "fail_closed": True,
+            "error": "input_schema_or_json must be a JSON string or dict.",
+            "is_mcp_safe": False,
+            "mcp_compatibility_score": 0,
+            "audited_at_utc": utc_now_iso(),
+        }
+
+    fixed = copy.deepcopy(schema)
+    props = fixed.get("properties")
+    if not isinstance(props, dict):
+        props = {}
+        fixed["properties"] = props
+
+    req_raw = fixed.get("required")
+    required_list: List[str] = [str(x) for x in req_raw] if isinstance(req_raw, list) else []
+    required_set = set(required_list)
+
+    issues: List[Dict[str, Any]] = []
+    score = 100
+
+    for req_field in list(required_list):
+        if req_field not in props or not isinstance(props.get(req_field), dict):
+            score -= 20
+            issues.append(
+                {
+                    "field": req_field,
+                    "severity": "MEDIUM",
+                    "code": "UNDEFINED_REQUIRED_PROPERTY",
+                    "detail": f"Field '{req_field}' is listed in 'required' but missing from 'properties'.",
+                    "remediation": f"Remove '{req_field}' from 'required' or define it in 'properties'.",
+                }
+            )
+            required_list.remove(req_field)
+            required_set.discard(req_field)
+
+    for prop_name, prop_def in props.items():
+        if not isinstance(prop_def, dict):
+            continue
+        is_req = prop_name in required_set
+        has_default = "default" in prop_def and prop_def["default"] is not None
+        has_prefill = "prefill" in prop_def and prop_def["prefill"] is not None
+        prop_type = str(prop_def.get("type") or "string")
+        desc = str(prop_def.get("description") or "").strip()
+
+        if is_req and has_default:
+            score -= 35
+            default_val = prop_def["default"]
+            issues.append(
+                {
+                    "field": prop_name,
+                    "severity": "CRITICAL",
+                    "code": "APIFY_MCP_REQUIRED_WITH_DEFAULT_TRAP",
+                    "detail": (
+                        f"Field '{prop_name}' is in 'required' AND defines 'default': {json.dumps(default_val)}. "
+                        "Apify MCP Server advertises fields with 'default' as optional in tools/list, causing MCP agents "
+                        "to omit the parameter while Apify daily automated checks pass via prefill."
+                    ),
+                    "remediation": (
+                        f"Move 'default' ({json.dumps(default_val)}) to 'prefill' so MCP preserves '{prop_name}' as required "
+                        "while Apify Console and automated maintenance checks remain pre-populated."
+                    ),
+                }
+            )
+            if auto_fix_strategy == "remove_from_required":
+                if prop_name in required_list:
+                    required_list.remove(prop_name)
+                required_set.discard(prop_name)
+            else:
+                if not has_prefill and prop_type != "boolean":
+                    prop_def["prefill"] = default_val
+                prop_def.pop("default", None)
+                has_default = False
+                has_prefill = "prefill" in prop_def
+
+        if is_req and not has_default and not has_prefill and prop_type != "boolean":
+            score -= 20
+            issues.append(
+                {
+                    "field": prop_name,
+                    "severity": "HIGH",
+                    "code": "APIFY_MAINTENANCE_MISSING_PREFILL_ON_REQUIRED",
+                    "detail": (
+                        f"Required field '{prop_name}' has neither 'prefill' nor 'default'. Apify daily automated tests "
+                        "will invoke the Actor without a value and mark the Actor 'Under maintenance'."
+                    ),
+                    "remediation": f"Add a valid 'prefill' sample value to '{prop_name}' in .actor/input_schema.json.",
+                }
+            )
+
+        if len(desc) < 10:
+            score -= 5
+            issues.append(
+                {
+                    "field": prop_name,
+                    "severity": "LOW",
+                    "code": "SPARSE_MCP_TOOL_DESCRIPTION",
+                    "detail": f"Property '{prop_name}' has a short/missing description ({len(desc)} chars).",
+                    "remediation": "Provide a clear 1-sentence description for MCP tool-calling agents.",
+                }
+            )
+
+    if required_list:
+        fixed["required"] = required_list
+    elif "required" in fixed:
+        fixed["required"] = []
+
+    score = max(0, min(100, score))
+    critical_count = sum(1 for i in issues if i["severity"] == "CRITICAL")
+    high_count = sum(1 for i in issues if i["severity"] == "HIGH")
+
+    return {
+        "status": "ok",
+        "fail_closed": False,
+        "is_mcp_safe": critical_count == 0 and high_count == 0,
+        "mcp_compatibility_score": score,
+        "properties_scanned": len(props),
+        "required_fields_count": len(required_list),
+        "critical_required_default_traps": critical_count,
+        "high_maintenance_prefill_gaps": high_count,
+        "issues_count": len(issues),
+        "issues": issues,
+        "fixed_input_schema": fixed,
+        "reference_url": "https://docs.apify.com/platform/actors/development/actor-definition/input-schema/specification/v1",
+        "audited_at_utc": utc_now_iso(),
+    }

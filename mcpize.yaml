@@ -28,6 +28,7 @@ pricing:
       domain_rdap_and_dns_hygiene: "0.01"
       bulk_email_and_domain_hygiene: "0.02"
       audit_mcp_server_trust: "0.01"
+      lint_apify_mcp_input_schema: "0.01"
       email_security_posture: "0.02"
       screen_uk_sanctions: "0.02"
       screen_us_ofac_sanctions: "0.02"
@@ -70,3 +71,6 @@ tools:
   - name: us_regulatory_recall_and_enforcement_check
     description: Live US FDA openFDA enforcement, US CPSC consumer product recall, and US NHTSA vehicle recall check.
     price: "0.02"
+  - name: lint_apify_mcp_input_schema
+    description: Lint and auto-fix Apify .actor/input_schema.json for the MCP required+default silent drop bug and maintenance prefill gaps.
+    price: "0.01"

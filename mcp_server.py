@@ -21,6 +21,7 @@ except ImportError:
 from compliance_engine import (
     ComplianceUpstreamError,
     audit_mcp_server_trust as _audit_mcp_server_trust,
+    lint_apify_mcp_input_schema as _lint_apify_mcp_input_schema,
     bulk_email_and_domain_hygiene as _bulk_email_and_domain_hygiene,
     domain_rdap_and_dns_hygiene as _domain_rdap_and_dns_hygiene,
     email_security_posture as _email_security_posture,
@@ -309,6 +310,22 @@ def us_regulatory_recall_and_enforcement_check(
                 "status_code": exc.status_code,
             },
         }
+
+
+@mcp.tool()
+def lint_apify_mcp_input_schema(
+    input_schema_json: str,
+    auto_fix_strategy: str = "move_default_to_prefill",
+) -> Dict[str, Any]:
+    """
+    Lint an Apify .actor/input_schema.json for the MCP required+default silent drop bug
+    (where Apify MCP Server marks required fields with defaults as optional in tools/list)
+    and missing prefill values that break Apify daily maintenance checks. Returns auto-fixed schema.
+    """
+    return _lint_apify_mcp_input_schema(
+        input_schema_or_json=input_schema_json,
+        auto_fix_strategy=auto_fix_strategy,
+    )
 
 
 def main() -> None:

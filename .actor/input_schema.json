@@ -16,6 +16,7 @@
         "domain_rdap_and_dns_hygiene",
         "bulk_email_and_domain_hygiene",
         "audit_mcp_server_trust",
+        "lint_apify_mcp_input_schema",
         "email_security_posture",
         "screen_uk_sanctions",
         "screen_us_ofac_sanctions",
@@ -27,7 +28,7 @@
       "title": "Entity / Individual / Product Name",
       "type": "string",
       "description": "Organization, company, charity, person, or product name to screen.",
-      "default": "Oxfam",
+      "prefill": "Oxfam",
       "editor": "textfield"
     },
     "domain": {
@@ -42,6 +43,12 @@
       "type": "array",
       "description": "Optional list of up to 100 domains for batch DNS/DMARC hygiene screening (charged_results_only=True).",
       "editor": "stringList"
+    },
+    "input_schema_json": {
+      "title": "Apify .actor/input_schema.json Payload (for lint_apify_mcp_input_schema)",
+      "type": "string",
+      "description": "Optional JSON string of an Apify .actor/input_schema.json file to lint and auto-fix for the MCP required+default silent drop bug.",
+      "editor": "textarea"
     },
     "company_or_charity_number": {
       "title": "UK Charity or Companies House Number",

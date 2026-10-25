@@ -324,3 +324,35 @@ def test_health_and_provenance_x402_handshake() -> None:
     assert hp["charged_results_only"] is True
     assert hp["x402PaymentRoutes"][0]["network"] == "eip155:8453"
     assert hp["x402PaymentRoutes"][0]["recipient"] == "0xfe4404ee088a741DC6F62d4132e21E14B1912940"
+
+
+def test_lint_apify_mcp_input_schema_and_self_check() -> None:
+    # 1. Verify our own .actor/input_schema.json passes 100/100 with zero required+default traps
+    actor_schema_path = Path(__file__).resolve().parent.parent / ".actor" / "input_schema.json"
+    own_res = ce.lint_apify_mcp_input_schema(actor_schema_path.read_text(encoding="utf-8"))
+    assert own_res["status"] == "ok"
+    assert own_res["is_mcp_safe"] is True
+    assert own_res["mcp_compatibility_score"] == 100
+    assert own_res["critical_required_default_traps"] == 0
+
+    # 2. Verify detection and auto-remediation of the required+default MCP silent drop bug
+    buggy = {
+        "title": "Buggy Actor",
+        "type": "object",
+        "schemaVersion": 1,
+        "properties": {
+            "query": {
+                "title": "Query",
+                "type": "string",
+                "description": "Search query for the target dataset.",
+                "default": "example",
+            }
+        },
+        "required": ["query"],
+    }
+    bug_res = mcp_server.lint_apify_mcp_input_schema(json.dumps(buggy))
+    assert bug_res["status"] == "ok"
+    assert bug_res["is_mcp_safe"] is False
+    assert bug_res["critical_required_default_traps"] == 1
+    assert bug_res["fixed_input_schema"]["properties"]["query"]["prefill"] == "example"
+    assert "default" not in bug_res["fixed_input_schema"]["properties"]["query"]
