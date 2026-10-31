@@ -552,3 +552,13 @@ def test_bool_strings_and_nested_entities_safe(monkeypatch) -> None:
     items = m.execute_actor_action({"action": "screen_entity", "include_us_ofac": "false",
                                     "entities": [{"entity_name": "A", "entities": [{"entity_name": "B"}] * 30}]})
     assert len(items) == 1 and len(calls) == 1
+
+
+def test_uk_sanctions_schema_drift_fails_closed() -> None:
+    good_fcdo = "id,schema,name,aliases,identifiers,countries,program_ids,sanctions,last_seen\n1,Person,X,,,,,,\n"
+    bad_uksl = "Report Date: 30-Oct-2026\nFoo,Bar\n1,2\n"
+    def fetch(url):
+        return (good_fcdo if "opensanctions" in url else bad_uksl), "2026-10-31T00:00:00Z"
+    ce._CSV_CACHE.clear() if hasattr(ce, "_CSV_CACHE") else None
+    with pytest.raises(ce.ComplianceUpstreamError):
+        ce.screen_uk_sanctions(query="X", fetcher=fetch)

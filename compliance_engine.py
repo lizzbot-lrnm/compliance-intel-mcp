@@ -257,6 +257,11 @@ def screen_uk_sanctions(
 
     # 1. Parse UK FCDO Sanctions CSV
     fcdo_reader = csv.DictReader(io.StringIO(fcdo_csv))
+    if not {"name", "id"}.issubset(set(fcdo_reader.fieldnames or [])):
+        raise ComplianceUpstreamError(
+            "UK FCDO (OpenSanctions) CSV schema changed: required columns name/id missing; failing closed",
+            source_url=UK_FCDO_OPENSANCTIONS_CSV_URL,
+        )
     fcdo_rows_scanned = 0
     for row in fcdo_reader:
         fcdo_rows_scanned += 1
@@ -297,6 +302,11 @@ def screen_uk_sanctions(
         start_idx = 1
 
     ofsi_reader = csv.DictReader(io.StringIO("\n".join(ofsi_lines[start_idx:])))
+    if not {"Name 1", "Name 6"}.issubset(set(ofsi_reader.fieldnames or [])):
+        raise ComplianceUpstreamError(
+            "UK Sanctions List CSV schema changed: required Name 1/Name 6 columns missing; failing closed",
+            source_url=UK_SANCTIONS_LIST_CSV_URL,
+        )
     ofsi_rows_scanned = 0
     for row in ofsi_reader:
         ofsi_rows_scanned += 1
