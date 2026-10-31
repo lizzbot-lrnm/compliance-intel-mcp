@@ -503,15 +503,27 @@ def test_actor_default_and_hello_world_input_succeeds() -> None:
         {},
         {"helloWorld": 123},
         {"body": '{ "helloWorld": 123 }'},
-        {"action": " screen_entity", "query": "iban", "country": "ALL"},
+        {"action": " screen_entity", "query": "Oxfam", "country": "ALL"},
     ]:
         items = execute_actor_action(payload)
         assert len(items) == 1
         item = items[0]
         assert item["status"] == "ok"
         assert item["fail_closed"] is False
+        assert item["summary"]["sanctions_matched"] is False
+        assert item["uk_sanctions"]["status"] == "ok"
         assert item["input"]["action"] == "screen_entity"
-        assert item["input"]["query"] == "iban"
+        assert item["input"]["query"] == "Oxfam"
         assert item["input"]["country"] == "ALL"
         assert len(item["sources"]) >= 2
 
+
+def test_screen_entity_fails_closed_without_fabricated_clearance(monkeypatch) -> None:
+    import src.main as m
+    err = {"status": "error", "fail_closed": True, "error": {"message": "down"}}
+    monkeypatch.setattr(m, "screen_uk_sanctions", lambda **k: err)
+    monkeypatch.setattr(m, "screen_us_ofac_sanctions", lambda **k: err)
+    item = m.execute_actor_action({"action": "screen_entity", "query": "Acme"})[0]
+    assert item["status"] == "error" and item["fail_closed"] is True
+    assert item["summary"]["overall_risk_level"] == "UNKNOWN"
+    assert item["summary"]["sanctions_matched"] is None

@@ -47,10 +47,10 @@ def _normalize_actor_input(actor_input: Any) -> Dict[str, Any]:
     """
     Normalize raw Apify Actor input so {}, {"helloWorld": 123}, or
     {"body": "{ \"helloWorld\": 123 }"} deterministically map to
-    action="screen_entity", query="iban", country="ALL".
+    action="screen_entity", query="Oxfam", country="ALL".
     """
     if not isinstance(actor_input, dict):
-        return {"action": "screen_entity", "query": "iban", "country": "ALL"}
+        return {"action": "screen_entity", "query": "Oxfam", "country": "ALL", "entity_name": "Oxfam"}
 
     normalized: Dict[str, Any] = dict(actor_input)
     raw_body = normalized.get("body")
@@ -70,9 +70,9 @@ def _normalize_actor_input(actor_input: Any) -> Dict[str, Any]:
     if not meaningful_keys:
         return {
             "action": "screen_entity",
-            "query": "iban",
+            "query": "Oxfam",
             "country": "ALL",
-            "entity_name": "iban",
+            "entity_name": "Oxfam",
         }
     return normalized
 
@@ -103,7 +103,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
                 results.extend(execute_actor_action(sub_input))
         return results
 
-    entity_name = str(actor_input.get("entity_name") or actor_input.get("query") or "iban").strip()
+    entity_name = str(actor_input.get("entity_name") or actor_input.get("query") or "Oxfam").strip()
     country = str(actor_input.get("country") or "ALL").strip().upper()
     domain = actor_input.get("domain")
     domains = actor_input.get("domains")
@@ -112,7 +112,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     uk_postcode = actor_input.get("uk_postcode")
     include_rdap = bool(actor_input.get("include_rdap", False))
     include_us_ofac = bool(actor_input.get("include_us_ofac", True))
-    include_us_recalls = bool(actor_input.get("include_us_recalls", True))
+    include_us_recalls = bool(actor_input.get("include_us_recalls", False))
     vehicle_make = actor_input.get("vehicle_make")
     vehicle_model = actor_input.get("vehicle_model")
     vehicle_year = actor_input.get("vehicle_year")
@@ -122,70 +122,43 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         vehicle_year = None
 
     if action == "screen_entity":
+        # Live UK FCDO + US OFAC screening. Never fabricates a clearance: any upstream
+        # failure yields status=error / fail_closed=True with no risk verdict.
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        q_val = str(actor_input.get("query") or actor_input.get("entity_name") or "iban").strip()
-        try:
-            rro_sample = search_uk_property_tribunal_rro_precedents(
-                query="" if q_val.lower() == "iban" else q_val,
-                region="all",
-                max_results=max_results,
-            )
-            matched_items = rro_sample.get("results", [])
-        except Exception:
-            matched_items = []
-        return [
-            {
-                "status": "ok",
-                "fail_closed": False,
-                "screened_at_utc": now_utc,
-                "input": {
-                    "action": "screen_entity",
-                    "query": q_val,
-                    "country": country,
-                    "entity_name": q_val,
-                    "max_results": max_results,
-                },
-                "summary": {
-                    "overall_risk_level": "LOW",
-                    "jurisdiction_scope": country,
-                    "sanctions_matched": False,
-                    "email_security_grade": "A",
-                    "deterministic_0_token": True,
-                },
-                "uk_sanctions": {
-                    "status": "ok",
-                    "query": q_val,
-                    "is_sanctioned_match": False,
-                    "match_count": 0,
-                    "matches": [],
-                },
-                "us_ofac_sanctions": {
-                    "status": "ok",
-                    "query": q_val,
-                    "is_sanctioned_match": False,
-                    "match_count": 0,
-                    "matches": [],
-                },
-                "results": matched_items,
-                "sources": [
-                    {
-                        "name": "UK FCDO Consolidated Sanctions & HM Treasury OFSI",
-                        "url": "https://www.gov.uk/government/publications/the-uk-sanctions-list",
-                        "retrieved_at_utc": now_utc,
-                    },
-                    {
-                        "name": "US Treasury OFAC SDN & Consolidated List",
-                        "url": "https://sanctionssearch.ofac.treas.gov/",
-                        "retrieved_at_utc": now_utc,
-                    },
-                    {
-                        "name": "GOV.UK Residential Property Tribunal Decisions (OGL v3.0)",
-                        "url": "https://www.gov.uk/residential-property-tribunal-decisions",
-                        "retrieved_at_utc": now_utc,
-                    },
-                ],
+        q_val = str(actor_input.get("query") or actor_input.get("entity_name") or "Oxfam").strip()
+        uk = screen_uk_sanctions(query=q_val, max_results=max_results)
+        checks = {"uk_sanctions": uk}
+        if include_us_ofac and country in ("ALL", "US"):
+            checks["us_ofac_sanctions"] = screen_us_ofac_sanctions(query=q_val, max_results=max_results)
+        errors = {k: v.get("error") for k, v in checks.items() if v.get("status") != "ok"}
+        item: Dict[str, Any] = {
+            "status": "error" if errors else "ok",
+            "fail_closed": bool(errors),
+            "screened_at_utc": now_utc,
+            "input": {
+                "action": "screen_entity",
+                "query": q_val,
+                "country": country,
+                "entity_name": q_val,
+                "max_results": max_results,
+            },
+            **checks,
+            "sources": [src for v in checks.values() for src in (v.get("sources") or [])]
+            or [{"name": k, "url": v.get("source_url", "")} for k, v in checks.items()],
+        }
+        if errors:
+            item["error"] = {"message": "Upstream sanctions source unavailable; no verdict issued", "details": errors}
+            item["summary"] = {"overall_risk_level": "UNKNOWN", "sanctions_matched": None}
+        else:
+            matched = any(v.get("is_sanctioned_match") for v in checks.values())
+            item["summary"] = {
+                "overall_risk_level": "HIGH" if matched else "NO_MATCH_ON_SCREENED_LISTS",
+                "jurisdiction_scope": country,
+                "sanctions_matched": matched,
+                "lists_screened": list(checks.keys()),
+                "deterministic_0_token": True,
             }
-        ]
+        return [item]
 
     if action == "health_and_provenance":
         return [health_and_provenance()]
@@ -203,7 +176,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         return [bulk_email_and_domain_hygiene(domains=domain_list, include_rdap=include_rdap)]
     if action == "search_uk_property_tribunal_rro_precedents":
         q_rro = str(actor_input.get("query") or actor_input.get("entity_name") or "").strip()
-        if q_rro in ("Oxfam", "iban") and "query" not in actor_input and "entity_name" not in actor_input:
+        if "query" not in actor_input and "entity_name" not in actor_input:
             q_rro = ""
         max_pct_raw = actor_input.get("max_pct")
         max_pct_val = float(max_pct_raw) if max_pct_raw is not None and str(max_pct_raw).strip() != "" else None
@@ -262,8 +235,6 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         ]
 
     # Default comprehensive screen: uk_sanctions_and_company_screen
-    if entity_name == "iban" and "entity_name" not in actor_input and "query" not in actor_input:
-        entity_name = "Oxfam"
     report = uk_sanctions_and_company_screen(
         entity_name=entity_name,
         domain=domain,
@@ -284,7 +255,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
 def _write_fallback_dataset(items: List[Dict[str, Any]]) -> None:
     """Write dataset items to local /apify_storage/datasets/default if writable."""
     storage_roots = [
-        Path(os.environ.get("APIFY_LOCAL_STORAGE_DIR", "")),
+        *([Path(os.environ["APIFY_LOCAL_STORAGE_DIR"])] if os.environ.get("APIFY_LOCAL_STORAGE_DIR") else []),
         Path("/apify_storage"),
         ROOT_DIR / "storage",
     ]
@@ -318,10 +289,7 @@ async def main() -> None:
                         await Actor.push_data({k: v for k, v in item.items() if v is not None})
                         await Actor.fail(status_message=str(item.get("error", {}).get("message", "Failed closed")))
                         return
-                    fallback = health_and_provenance()
-                    fallback["upstream_diagnostic"] = item.get("error")
-                    fallback["input"] = actor_input
-                    item = fallback
+                    # Non-strict: push the honest error item (no masking as healthy).
                 await Actor.push_data({k: v for k, v in item.items() if v is not None})
             await Actor.set_value("OUTPUT", items[0] if len(items) == 1 else items)
             Actor.log.info(f"Successfully pushed {len(items)} compliance report(s) to default dataset.")

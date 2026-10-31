@@ -74,7 +74,7 @@ def http_get_text(url: str, headers: Optional[Dict[str, str]] = None, timeout: i
     try:
         return _http_get_text_once(url, headers, timeout, allow_404_empty)
     except ComplianceUpstreamError as exc:
-        if "Timeout" not in str(exc):
+        if not any(t in str(exc).lower() for t in ("timeout", "timed out")):
             raise
         return _http_get_text_once(url, headers, timeout * 2, allow_404_empty)
 
@@ -318,7 +318,7 @@ def screen_uk_sanctions(
                 continue
             seen_ids.add(dedup_key)
             matches.append({
-                "list": "UK_OFSI_CONSOLIDATED_LIST",
+                "list": "UK_SANCTIONS_LIST_FCDO_CSV",
                 "record_id": f"OFSI-GROUP-{group_id}" if group_id else dedup_key,
                 "schema": row.get("Group Type", ""),
                 "name": full_name,

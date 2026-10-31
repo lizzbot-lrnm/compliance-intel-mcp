@@ -32,8 +32,8 @@
       "title": "Search Query / Entity / IBAN / Keyword",
       "type": "string",
       "description": "Entity name, company, charity, IBAN, or compliance keyword to screen across UK, EU, and US public registries.",
-      "default": "iban",
-      "prefill": "iban",
+      "default": "Oxfam",
+      "prefill": "Oxfam",
       "editor": "textfield"
     },
     "country": {
