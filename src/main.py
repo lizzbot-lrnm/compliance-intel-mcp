@@ -50,7 +50,7 @@ def _normalize_actor_input(actor_input: Any) -> Dict[str, Any]:
     action="screen_entity", query="Oxfam", country="ALL".
     """
     if not isinstance(actor_input, dict):
-        return {"action": "screen_entity", "query": "Oxfam", "country": "ALL", "entity_name": "Oxfam"}
+        return {"action": "screen_entity", "query": "Oxfam", "country": "ALL", "entity_name": "Oxfam", "_demo_default": True}
 
     normalized: Dict[str, Any] = dict(actor_input)
     raw_body = normalized.get("body")
@@ -73,8 +73,17 @@ def _normalize_actor_input(actor_input: Any) -> Dict[str, Any]:
             "query": "Oxfam",
             "country": "ALL",
             "entity_name": "Oxfam",
+            "_demo_default": True,
         }
     return normalized
+
+
+def _as_bool(v: Any, default: bool) -> bool:
+    if v is None:
+        return default
+    if isinstance(v, str):
+        return v.strip().lower() in ("1", "true", "yes", "y", "on")
+    return bool(v)
 
 
 def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
@@ -102,7 +111,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
             elif isinstance(item, dict):
                 sub_input = dict(actor_input)
                 sub_input.pop("entities", None)
-                sub_input.update(item)
+                sub_input.update({k: v for k, v in item.items() if k != "entities"})
                 results.extend(execute_actor_action(sub_input))
         return results
 
@@ -113,9 +122,9 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     company_or_charity_number = actor_input.get("company_or_charity_number")
     vat_number = actor_input.get("vat_number")
     uk_postcode = actor_input.get("uk_postcode")
-    include_rdap = bool(actor_input.get("include_rdap", False))
-    include_us_ofac = bool(actor_input.get("include_us_ofac", True))
-    include_us_recalls = bool(actor_input.get("include_us_recalls", False))
+    include_rdap = _as_bool(actor_input.get("include_rdap"), False)
+    include_us_ofac = _as_bool(actor_input.get("include_us_ofac"), True)
+    include_us_recalls = _as_bool(actor_input.get("include_us_recalls"), False)
     vehicle_make = actor_input.get("vehicle_make")
     vehicle_model = actor_input.get("vehicle_model")
     vehicle_year = actor_input.get("vehicle_year")
@@ -128,7 +137,9 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Live UK FCDO + US OFAC screening. Never fabricates a clearance: any upstream
         # failure yields status=error / fail_closed=True with no risk verdict.
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        q_val = str(actor_input.get("query") or actor_input.get("entity_name") or "Oxfam").strip()
+        user_q = str(actor_input.get("query") or actor_input.get("entity_name") or "").strip()
+        demo_default = (not user_q) or bool(actor_input.get("_demo_default"))
+        q_val = user_q or "Oxfam"
         def _safe(fn: Any) -> Dict[str, Any]:
             try:
                 return fn(query=q_val, max_results=max_results)
@@ -161,7 +172,9 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         else:
             matched = any(v.get("is_sanctioned_match") for v in checks.values())
             item["summary"] = {
-                "overall_risk_level": "HIGH" if matched else "NO_MATCH_ON_SCREENED_LISTS",
+                "overall_risk_level": "DEMO_DEFAULT_ENTITY_NOT_A_CLEARANCE" if demo_default
+                else ("HIGH" if matched else "NO_MATCH_ON_SCREENED_LISTS"),
+                "demo_default_entity": demo_default,
                 "jurisdiction_scope": country,
                 "sanctions_matched": matched,
                 "lists_screened": list(checks.keys()),

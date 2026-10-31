@@ -25,7 +25,8 @@ USER_AGENT = "ComplianceIntelMCP/1.0 (+https://github.com/lizzbot-lrnm/complianc
 DEFAULT_TIMEOUT_SECONDS = 20
 
 # Official live public endpoints
-UK_OFSI_CONSOLIDATED_CSV_URL = "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv"  # OFSI ConList retired 2026; FCDO UK Sanctions List (same Name 1-6 schema)
+UK_SANCTIONS_LIST_CSV_URL = "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv"  # OFSI ConList retired 2026; FCDO UK Sanctions List (same Name 1-6 schema)
+UK_OFSI_CONSOLIDATED_CSV_URL = UK_SANCTIONS_LIST_CSV_URL  # deprecated alias
 UK_FCDO_OPENSANCTIONS_CSV_URL = "https://data.opensanctions.org/datasets/latest/gb_fcdo_sanctions/targets.simple.csv"
 UK_GOV_SANCTIONS_META_URL = "https://www.gov.uk/api/content/government/publications/the-uk-sanctions-list"
 
@@ -249,7 +250,7 @@ def screen_uk_sanctions(
         raise ValueError("query must be a non-empty string")
 
     fcdo_csv, fcdo_ts = _get_cached_csv(UK_FCDO_OPENSANCTIONS_CSV_URL, fetcher=fetcher)
-    ofsi_csv, ofsi_ts = _get_cached_csv(UK_OFSI_CONSOLIDATED_CSV_URL, fetcher=fetcher)
+    ofsi_csv, ofsi_ts = _get_cached_csv(UK_SANCTIONS_LIST_CSV_URL, fetcher=fetcher)
 
     matches: List[Dict[str, Any]] = []
     seen_ids = set()
@@ -329,7 +330,7 @@ def screen_uk_sanctions(
                 "uk_sanctions_date_designated": row.get("UK Sanctions List Date Designated", ""),
                 "other_information": other_info[:400],
                 "match_score": score,
-                "source_url": UK_OFSI_CONSOLIDATED_CSV_URL,
+                "source_url": UK_SANCTIONS_LIST_CSV_URL,
             })
 
     if fcdo_rows_scanned == 0 or ofsi_rows_scanned == 0:
@@ -363,7 +364,7 @@ def screen_uk_sanctions(
             },
             {
                 "name": "UK FCDO UK Sanctions List (CSV; successor to OFSI Consolidated List)",
-                "url": UK_OFSI_CONSOLIDATED_CSV_URL,
+                "url": UK_SANCTIONS_LIST_CSV_URL,
                 "retrieved_at_utc": ofsi_ts,
             },
         ],
@@ -1561,7 +1562,7 @@ def health_and_provenance() -> Dict[str, Any]:
         ],
         "official_live_sources": [
             UK_FCDO_OPENSANCTIONS_CSV_URL,
-            UK_OFSI_CONSOLIDATED_CSV_URL,
+            UK_SANCTIONS_LIST_CSV_URL,
             GLEIF_LEI_API_URL,
             FINDTHATCHARITY_RECONCILE_URL,
             CLOUDFLARE_DOH_URL,

@@ -512,6 +512,10 @@ def test_actor_default_and_hello_world_input_succeeds() -> None:
         assert item["fail_closed"] is False
         assert item["summary"]["sanctions_matched"] is False
         assert item["uk_sanctions"]["status"] == "ok"
+        if payload.get("query"):
+            assert item["summary"]["overall_risk_level"] == "NO_MATCH_ON_SCREENED_LISTS"
+        else:
+            assert item["summary"]["overall_risk_level"] == "DEMO_DEFAULT_ENTITY_NOT_A_CLEARANCE"
         assert item["input"]["action"] == "screen_entity"
         assert item["input"]["query"] == "Oxfam"
         assert item["input"]["country"] == "ALL"
@@ -538,3 +542,13 @@ def test_screen_entity_catches_raised_upstream_errors(monkeypatch) -> None:
     item = m.execute_actor_action({})[0]
     assert item["status"] == "error" and item["fail_closed"] is True
     assert item["summary"]["sanctions_matched"] is None
+
+
+def test_bool_strings_and_nested_entities_safe(monkeypatch) -> None:
+    import src.main as m
+    assert m._as_bool("false", True) is False and m._as_bool("true", False) is True
+    calls = []
+    monkeypatch.setattr(m, "screen_uk_sanctions", lambda **k: calls.append(k) or {"status": "ok", "is_sanctioned_match": False})
+    items = m.execute_actor_action({"action": "screen_entity", "include_us_ofac": "false",
+                                    "entities": [{"entity_name": "A", "entities": [{"entity_name": "B"}] * 30}]})
+    assert len(items) == 1 and len(calls) == 1
