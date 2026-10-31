@@ -562,3 +562,12 @@ def test_uk_sanctions_schema_drift_fails_closed() -> None:
     ce._CSV_CACHE.clear() if hasattr(ce, "_CSV_CACHE") else None
     with pytest.raises(ce.ComplianceUpstreamError):
         ce.screen_uk_sanctions(query="X", fetcher=fetch)
+
+
+def test_batch_entities_override_parent_query(monkeypatch) -> None:
+    import src.main as m
+    seen = []
+    monkeypatch.setattr(m, "screen_uk_sanctions", lambda **k: seen.append(k["query"]) or {"status": "ok", "is_sanctioned_match": False})
+    m.execute_actor_action({"action": "screen_entity", "query": "Parent", "include_us_ofac": False,
+                            "entities": ["Alpha", {"entity_name": "Beta"}]})
+    assert seen == ["Alpha", "Beta"]

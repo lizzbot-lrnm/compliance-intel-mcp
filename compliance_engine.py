@@ -75,7 +75,7 @@ def http_get_text(url: str, headers: Optional[Dict[str, str]] = None, timeout: O
     try:
         return _http_get_text_once(url, headers, timeout, allow_404_empty)
     except ComplianceUpstreamError as exc:
-        if not any(t in str(exc).lower() for t in ("timeout", "timed out")):
+        if not (any(t in str(exc).lower() for t in ("timeout", "timed out")) or getattr(exc, "status_code", None) in (408, 429, 502, 503, 504)):
             raise
         return _http_get_text_once(url, headers, timeout * 2, allow_404_empty)
 
@@ -396,6 +396,11 @@ def screen_us_ofac_sanctions(
 
     ofac_csv, ofac_ts = _get_cached_csv(US_OFAC_OPENSANCTIONS_CSV_URL, fetcher=fetcher)
     reader = csv.DictReader(io.StringIO(ofac_csv))
+    if not {"name", "id"}.issubset(set(reader.fieldnames or [])):
+        raise ComplianceUpstreamError(
+            "US OFAC (OpenSanctions) CSV schema changed: required columns name/id missing; failing closed",
+            source_url=US_OFAC_OPENSANCTIONS_CSV_URL,
+        )
 
     matches: List[Dict[str, Any]] = []
     rows_scanned = 0

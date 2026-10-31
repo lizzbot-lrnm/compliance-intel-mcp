@@ -25,6 +25,7 @@ if str(ROOT_DIR) not in sys.path:
     sys.path.insert(0, str(ROOT_DIR))
 
 from compliance_engine import (
+    ComplianceUpstreamError,
     audit_mcp_server_trust,
     lint_apify_mcp_input_schema,
     extract_uk_scanned_pdf_clauses,
@@ -106,11 +107,15 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
             if isinstance(item, str):
                 sub_input = dict(actor_input)
                 sub_input.pop("entities", None)
+                sub_input.pop("query", None)
                 sub_input["entity_name"] = item
                 results.extend(execute_actor_action(sub_input))
             elif isinstance(item, dict):
                 sub_input = dict(actor_input)
                 sub_input.pop("entities", None)
+                if "entity_name" in item or "query" in item:
+                    sub_input.pop("query", None)
+                    sub_input.pop("entity_name", None)
                 sub_input.update({k: v for k, v in item.items() if k != "entities"})
                 results.extend(execute_actor_action(sub_input))
         return results
@@ -137,13 +142,13 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         # Live UK FCDO + US OFAC screening. Never fabricates a clearance: any upstream
         # failure yields status=error / fail_closed=True with no risk verdict.
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-        user_q = str(actor_input.get("query") or actor_input.get("entity_name") or "").strip()
+        user_q = str(actor_input.get("entity_name") or actor_input.get("query") or "").strip()
         demo_default = (not user_q) or bool(actor_input.get("_demo_default"))
         q_val = user_q or "Oxfam"
         def _safe(fn: Any) -> Dict[str, Any]:
             try:
                 return fn(query=q_val, max_results=max_results)
-            except Exception as exc:  # fail closed: surface as error item, never a clearance
+            except (ComplianceUpstreamError, OSError, ValueError) as exc:  # upstream/data failures fail closed; programming bugs propagate
                 return {"status": "error", "fail_closed": True,
                         "error": {"type": type(exc).__name__, "message": str(exc)[:500]}}
 
@@ -163,8 +168,7 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
                 "max_results": max_results,
             },
             **checks,
-            "sources": [src for v in checks.values() for src in (v.get("sources") or [])]
-            or [{"name": k, "url": v.get("source_url", "")} for k, v in checks.items()],
+            "sources": [src for v in checks.values() for src in (v.get("sources") or [])],
         }
         if errors:
             item["error"] = {"message": "Upstream sanctions source unavailable; no verdict issued", "details": errors}
