@@ -25,7 +25,7 @@ USER_AGENT = "ComplianceIntelMCP/1.0 (+https://github.com/lizzbot-lrnm/complianc
 DEFAULT_TIMEOUT_SECONDS = 20
 
 # Official live public endpoints
-UK_OFSI_CONSOLIDATED_CSV_URL = "https://ofsistorage.blob.core.windows.net/publishlive/2022format/ConList.csv"
+UK_OFSI_CONSOLIDATED_CSV_URL = "https://sanctionslist.fcdo.gov.uk/docs/UK-Sanctions-List.csv"  # OFSI ConList retired 2026; FCDO UK Sanctions List (same Name 1-6 schema)
 UK_FCDO_OPENSANCTIONS_CSV_URL = "https://data.opensanctions.org/datasets/latest/gb_fcdo_sanctions/targets.simple.csv"
 UK_GOV_SANCTIONS_META_URL = "https://www.gov.uk/api/content/government/publications/the-uk-sanctions-list"
 
@@ -68,7 +68,18 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def http_get_text(
+def http_get_text(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = None, allow_404_empty: bool = False) -> Tuple[str, str]:
+    """Retry once on upstream timeout (transient), else fail closed via _http_get_text_once."""
+    timeout = timeout or DEFAULT_TIMEOUT_SECONDS
+    try:
+        return _http_get_text_once(url, headers, timeout, allow_404_empty)
+    except ComplianceUpstreamError as exc:
+        if "Timeout" not in str(exc):
+            raise
+        return _http_get_text_once(url, headers, timeout * 2, allow_404_empty)
+
+
+def _http_get_text_once(
     url: str,
     headers: Optional[Dict[str, str]] = None,
     timeout: int = DEFAULT_TIMEOUT_SECONDS,
@@ -274,9 +285,13 @@ def screen_uk_sanctions(
     ofsi_lines = ofsi_csv.splitlines()
     ofsi_last_updated = ""
     start_idx = 0
-    if ofsi_lines and ofsi_lines[0].startswith("Last Updated"):
+    if ofsi_lines and ofsi_lines[0].startswith("Last Updated,") and "Unique ID" not in ofsi_lines[0]:
         parts = ofsi_lines[0].split(",", 1)
         ofsi_last_updated = parts[1].strip() if len(parts) > 1 else ""
+        start_idx = 1
+    elif ofsi_lines and ofsi_lines[0].startswith("Report Date"):
+        parts = ofsi_lines[0].split(":", 1)
+        ofsi_last_updated = parts[1].strip().strip(",") if len(parts) > 1 else ""
         start_idx = 1
 
     ofsi_reader = csv.DictReader(io.StringIO("\n".join(ofsi_lines[start_idx:])))
@@ -294,7 +309,7 @@ def screen_uk_sanctions(
         full_name = " ".join(p.strip() for p in name_parts if p and p.strip())
         if not full_name:
             continue
-        group_id = row.get("Group ID", "")
+        group_id = row.get("Group ID", "") or row.get("OFSI Group ID", "")
         other_info = row.get("Other Information", "")
         score = _score_name_match(q, full_name)
         if score >= min_score:
