@@ -527,3 +527,14 @@ def test_screen_entity_fails_closed_without_fabricated_clearance(monkeypatch) ->
     assert item["status"] == "error" and item["fail_closed"] is True
     assert item["summary"]["overall_risk_level"] == "UNKNOWN"
     assert item["summary"]["sanctions_matched"] is None
+
+
+def test_screen_entity_catches_raised_upstream_errors(monkeypatch) -> None:
+    import src.main as m
+    def boom(**k):
+        raise ce.ComplianceUpstreamError("HTTP 503", source_url="x", status_code=503)
+    monkeypatch.setattr(m, "screen_uk_sanctions", boom)
+    monkeypatch.setattr(m, "screen_us_ofac_sanctions", boom)
+    item = m.execute_actor_action({})[0]
+    assert item["status"] == "error" and item["fail_closed"] is True
+    assert item["summary"]["sanctions_matched"] is None

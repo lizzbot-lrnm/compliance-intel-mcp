@@ -84,9 +84,12 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     """
     actor_input = _normalize_actor_input(actor_input)
     action = str(actor_input.get("action") or "screen_entity").strip()
-    max_results = min(max(1, int(actor_input.get("max_results") or 5)), 50)
+    try:
+        max_results = min(max(1, int(actor_input.get("max_results") or 5)), 50)
+    except (TypeError, ValueError):
+        max_results = 5
 
-    # Support batch list of entities if provided (bounded to 25 per Worf DoS hardening)
+    # Support batch list of entities if provided (bounded to 25 for DoS hardening)
     entities = actor_input.get("entities")
     if isinstance(entities, list) and len(entities) > 0:
         results: List[Dict[str, Any]] = []
@@ -116,9 +119,9 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
     vehicle_make = actor_input.get("vehicle_make")
     vehicle_model = actor_input.get("vehicle_model")
     vehicle_year = actor_input.get("vehicle_year")
-    if vehicle_year is not None and str(vehicle_year).strip() != "":
-        vehicle_year = int(vehicle_year)
-    else:
+    try:
+        vehicle_year = int(vehicle_year) if vehicle_year is not None and str(vehicle_year).strip() != "" else None
+    except (TypeError, ValueError):
         vehicle_year = None
 
     if action == "screen_entity":
@@ -126,10 +129,16 @@ def execute_actor_action(actor_input: Dict[str, Any]) -> List[Dict[str, Any]]:
         # failure yields status=error / fail_closed=True with no risk verdict.
         now_utc = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
         q_val = str(actor_input.get("query") or actor_input.get("entity_name") or "Oxfam").strip()
-        uk = screen_uk_sanctions(query=q_val, max_results=max_results)
-        checks = {"uk_sanctions": uk}
+        def _safe(fn: Any) -> Dict[str, Any]:
+            try:
+                return fn(query=q_val, max_results=max_results)
+            except Exception as exc:  # fail closed: surface as error item, never a clearance
+                return {"status": "error", "fail_closed": True,
+                        "error": {"type": type(exc).__name__, "message": str(exc)[:500]}}
+
+        checks = {"uk_sanctions": _safe(screen_uk_sanctions)}
         if include_us_ofac and country in ("ALL", "US"):
-            checks["us_ofac_sanctions"] = screen_us_ofac_sanctions(query=q_val, max_results=max_results)
+            checks["us_ofac_sanctions"] = _safe(screen_us_ofac_sanctions)
         errors = {k: v.get("error") for k, v in checks.items() if v.get("status") != "ok"}
         item: Dict[str, Any] = {
             "status": "error" if errors else "ok",

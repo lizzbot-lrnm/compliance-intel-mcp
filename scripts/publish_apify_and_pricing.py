@@ -51,7 +51,7 @@ def main() -> int:
     parser.add_argument("--execute", action="store_true", help="Execute live Apify API mutations (requires approval)")
     args = parser.parse_args()
 
-    default_input = {"action": "screen_entity", "query": "iban", "country": "ALL"}
+    default_input = {"action": "screen_entity", "query": "Oxfam", "country": "ALL"}
     rro_pricing = [
         {
             "pricingModel": "PAY_PER_EVENT",

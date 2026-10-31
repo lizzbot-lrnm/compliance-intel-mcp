@@ -29,9 +29,9 @@
       "prefill": "screen_entity"
     },
     "query": {
-      "title": "Search Query / Entity / IBAN / Keyword",
+      "title": "Search Query / Entity Name",
       "type": "string",
-      "description": "Entity name, company, charity, IBAN, or compliance keyword to screen across UK, EU, and US public registries.",
+      "description": "Entity, company, charity or person name to screen across UK, EU, and US public registries.",
       "default": "Oxfam",
       "prefill": "Oxfam",
       "editor": "textfield"

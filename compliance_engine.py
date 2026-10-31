@@ -68,7 +68,7 @@ def utc_now_iso() -> str:
     return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def http_get_text(url: str, headers: Optional[Dict[str, str]] = None, timeout: int = None, allow_404_empty: bool = False) -> Tuple[str, str]:
+def http_get_text(url: str, headers: Optional[Dict[str, str]] = None, timeout: Optional[int] = None, allow_404_empty: bool = False) -> Tuple[str, str]:
     """Retry once on upstream timeout (transient), else fail closed via _http_get_text_once."""
     timeout = timeout or DEFAULT_TIMEOUT_SECONDS
     try:
@@ -290,8 +290,9 @@ def screen_uk_sanctions(
         ofsi_last_updated = parts[1].strip() if len(parts) > 1 else ""
         start_idx = 1
     elif ofsi_lines and ofsi_lines[0].startswith("Report Date"):
-        parts = ofsi_lines[0].split(":", 1)
-        ofsi_last_updated = parts[1].strip().strip(",") if len(parts) > 1 else ""
+        # Observed live 2026-10-31: "Report Date: 30-Oct-2026"; also accept "Report Date,30-Oct-2026".
+        rest = ofsi_lines[0][len("Report Date"):].lstrip(":, ")
+        ofsi_last_updated = rest.split(",", 1)[0].strip()
         start_idx = 1
 
     ofsi_reader = csv.DictReader(io.StringIO("\n".join(ofsi_lines[start_idx:])))
@@ -313,13 +314,13 @@ def screen_uk_sanctions(
         other_info = row.get("Other Information", "")
         score = _score_name_match(q, full_name)
         if score >= min_score:
-            dedup_key = f"OFSI-{group_id}-{full_name.upper()}"
+            dedup_key = f"UKSL-{group_id}-{full_name.upper()}"
             if dedup_key in seen_ids:
                 continue
             seen_ids.add(dedup_key)
             matches.append({
                 "list": "UK_SANCTIONS_LIST_FCDO_CSV",
-                "record_id": f"OFSI-GROUP-{group_id}" if group_id else dedup_key,
+                "record_id": f"UKSL-GROUP-{group_id}" if group_id else dedup_key,
                 "schema": row.get("Group Type", ""),
                 "name": full_name,
                 "regime": row.get("Regime", ""),
@@ -361,7 +362,7 @@ def screen_uk_sanctions(
                 "retrieved_at_utc": fcdo_ts,
             },
             {
-                "name": "UK HM Treasury OFSI Consolidated List of Targets",
+                "name": "UK FCDO UK Sanctions List (CSV; successor to OFSI Consolidated List)",
                 "url": UK_OFSI_CONSOLIDATED_CSV_URL,
                 "retrieved_at_utc": ofsi_ts,
             },
